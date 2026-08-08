@@ -2,3 +2,4 @@
 Thumbs.db
 .tmp_commit_msg_*
 node_modules/
+dist/
