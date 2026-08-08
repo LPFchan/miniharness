@@ -15,6 +15,18 @@ repo operates. Origin research: heatmap
 **Status:** DEC-20260808-001 summon contract implemented and live-verified
 (`npm install && npm run build && npm test`); see `records/STATUS.md`.
 
+## Install & prerequisite
+
+```sh
+npm install -g miniharness
+```
+
+The CLI consumes a generated `models.json` (provider enrollment, tiers, and
+per-model capability data) from `--config-dir`, else `PI_CODING_AGENT_DIR`,
+else `~/.pi/agent/`. That file is a projection of the operator's canonical
+provider registry (LPFchan/setup); on a machine without it the CLI installs
+fine but exits 2 until a config exists.
+
 ## Build & smoke
 
 ```sh
@@ -37,9 +49,12 @@ Flags: `--provider <name>`, `--model <id-or-tier>` (`haiku`/`sonnet`/`opus`),
 `--effort <level>`, `--system-prompt <text>`, `--system-prompt-file <path>`
 (`-` = stdin; stdin serves either the prompt or the system prompt, not both),
 `--cwd <path>` (must exist and be a directory), `--session-dir <path>`,
-`--no-session`, `--config-dir <path>` (override for the directory holding
-`models.json`; default is `PI_CODING_AGENT_DIR` or `~/.pi/agent/`), and
-`--help`.
+`--no-session`, `--compaction <off|auto>` (default `auto`: when a completed
+transcript would overflow the model's context window, the library's compaction
+summarizes the history and records the compaction entry in the session
+JSONL; the envelope is unchanged), `--config-dir <path>` (override for the
+directory holding `models.json`; default is `PI_CODING_AGENT_DIR` or
+`~/.pi/agent/`), and `--help`.
 
 ```sh
 node dist/cli.js "say hi"
@@ -48,10 +63,14 @@ printf 'say hi' | node dist/cli.js
 
 On success it prints one JSON envelope to stdout (see
 `records/decisions/DEC-20260808-001-cli-summon-contract.md` for the contract);
-stderr carries human-readable errors only. Provider credentials come from the
-ambient environment (e.g. `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`). When no
-provider is configured, the CLI exits 2 with a clear message and the smoke
-script skips.
+stderr carries human-readable errors only. Provider credentials: providers Pi
+ships as builtins use the ambient environment (e.g. `ANTHROPIC_API_KEY`);
+registry providers Pi does not ship (crofai, grimoire, kimicode, …) are
+registered as OpenAI-compatible endpoints whose keys resolve from the
+operator's auth store (`~/.local/share/opencode/auth.json`, the same seam
+setup writes for opencode auth; `MINIHARNESS_AUTH_FILE` overrides for tests).
+When no provider is configured, the CLI exits 2 with a clear message and the
+smoke script skips.
 
 ### Test-only fault-injection hook
 
