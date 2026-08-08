@@ -8,9 +8,9 @@ Do not use it as a transcript or a scratchpad.
 
 - Last updated: 2026-08-08
 - Overall posture: `active`
-- Current focus: summon contract fixed; implementation not started.
-- Highest-priority blocker: none — repo scaffold and contract in place, no code yet.
-- Next operator decision needed: none blocking — the first build slice (CLI summon on `pi-agent-core`) is unblocked.
+- Current focus: wave 1 landed (skeleton + conformance suite); wave 2 ready to fan out.
+- Highest-priority blocker: none.
+- Next operator decision needed: none blocking — wave 2 (slices C/D/E) is unblocked.
 - Related decisions: DEC-20260808-001 (CLI summon contract)
 - Origin research: heatmap `records/research/RSH-20260808-001-miniharness-opencode-replacement.md`
 
@@ -60,14 +60,16 @@ concurrency capped in the low teens; adopt nothing, fork nothing.
 
 - Goal: a headless summon that takes argv/env and returns one JSON document
   with a meaningful exit code, on `pi-agent-core`'s agent loop.
-- Status: `contract fixed, implementation not started`
+- Status: `skeleton landed; flag wiring (D/E) pending`
 - Why this matters now: it is the core capability heatmap's recap path needs.
-- Current work: contract accepted as DEC-20260808-001 (envelope with
-  `output` + optional session/usage fields; exit codes 0/1/2/3;
-  `--provider`/`--model`/`--effort` on setup's registry; first-class
-  `--system-prompt`; sessions on by default).
-- Exit criteria: a single summon emits the DEC-20260808-001 envelope in
-  place of `opencode run`.
+- Current work: wave 1 merged — `src/cli.ts` performs a headless summon on
+  `pi-agent-core`/`pi-ai` 0.84.1 and emits the DEC envelope (verified live:
+  exit 0 with tokens/cost/duration); the conformance suite
+  (`tests/contract.test.mjs`) gates remaining work with 3 red exit-2 tests
+  for the unimplemented flags.
+- Exit criteria: a single summon emits the DEC-20260808-001 envelope with
+  `--provider`/`--model`/`--effort` resolution and sessions on, in place of
+  `opencode run`.
 - Dependencies: `@earendil-works/pi-agent-core`, `@earendil-works/pi-ai`;
   generated `models.json` from setup's registry.
 - Risks: Node memory tax at concurrency (low-teens cap).
@@ -75,6 +77,16 @@ concurrency capped in the low teens; adopt nothing, fork nothing.
 
 ## Recent Changes To Project Reality
 
+- Date: 2026-08-08
+  - Change: Wave 1 fanned out to two parallel subagents (opencodex,
+    crofai/deepseek-v4-flash-0731 on the codex leg) and merged: CLI skeleton
+    (slice A) + conformance suite (slice B). One review finding: slice B's
+    test script needed a glob for Node 22.23 (its reported result was not
+    reproducible as shipped); fixed at integration.
+  - Why it matters: the DEC envelope is proven against a live provider; the
+    conformance gate now measures wave-2 progress automatically.
+  - Related ids: DEC-20260808-001, LOG-20260808-152831-odexk3,
+    LOG-20260808-153054-odexk3
 - Date: 2026-08-08
   - Change: Summon contract fixed across sixteen surfaces (DEC-20260808-001).
   - Why it matters: removes the last blocking decision; all near-term build
@@ -98,13 +110,14 @@ concurrency capped in the low teens; adopt nothing, fork nothing.
 
 ## Immediate Next Steps
 
-- Next: wire local commit hooks (`scripts/install-hooks.sh`).
-  - Owner: orchestrator.
-  - Trigger: bootstrap commit.
-  - Related ids: none.
-- Next: fan out the build slices against DEC-20260808-001 — CLI skeleton on
-  `pi-agent-core`, conformance test, JSONL session persistence, models.json
-  consumer.
+- Next: fan out wave 2 — slice C (JSONL session persistence +
+  adoption-join probe), slice D (models.json consumer +
+  provider/model/effort resolution), slice E (CLI flag wiring).
   - Owner: worker agents (parallel).
-  - Trigger: none — contract is fixed.
+  - Trigger: none — wave 1 merged.
+  - Related ids: DEC-20260808-001.
+- Next: provide a fault-injection hook so the exit-1 conformance test can
+  leave todo (flagged by slice B).
+  - Owner: wave-2 worker (slice E).
+  - Trigger: slice E implementation.
   - Related ids: DEC-20260808-001.
