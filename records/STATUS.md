@@ -19,11 +19,12 @@ Do not use it as a transcript or a scratchpad.
 The repository operating scaffold is adopted from `LPFchan/repo-template`
 version 1.1.5. The canonical product specification is `records/SPEC.md`;
 current operational truth is this file; accepted future direction is
-`records/PLANS.md`. No implementation exists yet. The build/fork/adopt
-question that motivated the project is settled by prior research (heatmap
-RSH-20260808-001): build a CLI-only thin harness on Pi's agent libraries
-(`@earendil-works/pi-agent-core` + `pi-ai`), sessions on as JSONL, JSON in/out,
-concurrency capped in the low teens; adopt nothing, fork nothing.
+`records/PLANS.md`. The implementation fixed by DEC-20260808-001 exists and
+is live-verified: a CLI-only thin harness on Pi's agent libraries
+(`@earendil-works/pi-agent-core` + `pi-ai` 0.84.1), sessions on as JSONL,
+one JSON envelope out, meaningful exit codes, registry-driven
+provider/model/effort resolution including custom OpenAI-compatible
+providers. Nothing forked, nothing adopted beyond the two pinned libraries.
 
 ## Active Phases Or Tracks
 
@@ -46,14 +47,14 @@ concurrency capped in the low teens; adopt nothing, fork nothing.
 - Goal: recurring review of upstream Pi releases against the pinned version,
   so contract changes (loop API, session JSONL, `models.json` schema) are
   caught deliberately rather than by breakage.
-- Status: `not started`
+- Status: `ready to start`
 - Why this matters now: the harness rides Pi's weekly release cadence without
   forking; that only works if upstream is actually watched.
 - Current work: module enabled, scope declared in
-  `records/upstream-intake/SCOPE.md`.
-- Exit criteria: first weekly intake reviewed once the harness pins a version.
-- Dependencies: a pinned `@earendil-works/pi-*` version (post-implementation).
-- Risks: none before implementation; the module is dormant until then.
+  `records/upstream-intake/SCOPE.md`; `@earendil-works/pi-*` pinned at 0.84.1.
+- Exit criteria: first weekly intake reviewed against the 0.84.1 pin.
+- Dependencies: none — the pin exists.
+- Risks: none.
 - Related ids: heatmap RSH-20260808-001.
 
 ### CLI Summon Contract

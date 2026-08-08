@@ -16,6 +16,8 @@ Do not put raw brainstorms or untriaged intake here.
 
 - Outcome: a CLI-only harness that summons a model headlessly and returns one
   JSON document, replacing `opencode run` in heatmap's recap path.
+- Status: implemented (DEC-20260808-001; see SPEC/STATUS). Remaining future
+  work from this direction is the heatmap cutover and the load test, below.
 - Why this is accepted: settled by heatmap RSH-20260808-001 (Updates 2–3).
   Building thin on `@earendil-works/pi-agent-core` + `pi-ai` keeps the
   multi-provider retry layer and per-model capability/effort catalogue from a
@@ -45,31 +47,12 @@ Do not put raw brainstorms or untriaged intake here.
 
 ### Near Term
 
-- Initiative: build slices against the fixed contract (DEC-20260808-001),
-  fanned out to parallel workers in two waves.
-  - Why now: the contract is fixed; the slices below are independent once
-    the package skeleton exists.
-  - Wave 1 (parallel):
-    - Slice A — package skeleton + pinned `@earendil-works/pi-agent-core` /
-      `pi-ai` + one headless summon smoke spike (owns `package.json`,
-      tsconfig, `src/`; pins the version everything else builds on).
-    - Slice B — contract conformance test harness asserting argv-in /
-      envelope-out / exit codes 0–3 from DEC-20260808-001 (owns `tests/`;
-      gates every later change).
-  - Wave 2 (parallel, after wave 1 merges):
-    - Slice C — JSONL session persistence at the harness-owned path
-      (`~/.local/share/miniharness/sessions/`, `--session-dir`,
-      `--no-session`) plus a read-only adoption-join probe against fixture
-      JSONL.
-    - Slice D — `models.json` consumer + `--provider`/`--model`/`--effort`
-      resolution against setup's registry and the generated
-      `thinkingLevelMap`, using a fixture projection until the setup-side
-      generator lands.
-    - Slice E — CLI wiring: argv/stdin parsing, `--system-prompt`,
-      `--cwd`, envelope emission, exit-code mapping.
-  - Dependencies: npm deps (registry reachable, current 0.84.1); generated
-    `models.json` (fixture acceptable until the setup generator lands).
-  - Related ids: DEC-20260808-001, heatmap RSH-20260808-001.
+- Initiative: first upstream intake review of the pinned Pi version (0.84.1).
+  - Why now: the pin exists; the module is dormant until its first review,
+    and starting the cadence now means the first weekly release diff is
+    small rather than accrued.
+  - Dependencies: none.
+  - Related ids: `records/upstream-intake/SCOPE.md`.
 
 ### Mid Term
 
@@ -78,11 +61,6 @@ Do not put raw brainstorms or untriaged intake here.
     expected output shape.
   - Dependencies: CLI summon contract; heatmap config change.
   - Related ids: heatmap `src/recap/mod.rs`.
-- Initiative: first upstream intake review of the pinned Pi version.
-  - Why later: meaningful only once a `@earendil-works/pi-*` version is pinned;
-    then runs weekly against new releases.
-  - Dependencies: implementation pins a version; `upstream-intake/SCOPE.md`.
-  - Related ids: `records/upstream-intake/SCOPE.md`.
 - Initiative: concurrency load test on the real host.
   - Why later: measures the Node tax at the actual burst; gates the
     low-teens cap.

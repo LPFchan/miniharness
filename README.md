@@ -12,7 +12,8 @@ See `records/SPEC.md` for the canonical spec and `records/REPO.md` for how this
 repo operates. Origin research: heatmap
 `records/research/RSH-20260808-001-miniharness-opencode-replacement.md`.
 
-**Status:** scaffold adopted (repo-template 1.1.5); implementation not started.
+**Status:** DEC-20260808-001 summon contract implemented and live-verified
+(`npm install && npm run build && npm test`); see `records/STATUS.md`.
 
 ## Build & smoke
 
