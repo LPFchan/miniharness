@@ -8,10 +8,10 @@ Do not use it as a transcript or a scratchpad.
 
 - Last updated: 2026-08-08
 - Overall posture: `active`
-- Current focus: repository bootstrap; research settled, implementation not started.
-- Highest-priority blocker: none — repo scaffold in place, no code yet.
-- Next operator decision needed: confirm the first build slice (CLI summon contract on `pi-agent-core`).
-- Related decisions: pending (see `records/decisions/`)
+- Current focus: summon contract fixed; implementation not started.
+- Highest-priority blocker: none — repo scaffold and contract in place, no code yet.
+- Next operator decision needed: none blocking — the first build slice (CLI summon on `pi-agent-core`) is unblocked.
+- Related decisions: DEC-20260808-001 (CLI summon contract)
 - Origin research: heatmap `records/research/RSH-20260808-001-miniharness-opencode-replacement.md`
 
 ## Current State Summary
@@ -60,11 +60,14 @@ concurrency capped in the low teens; adopt nothing, fork nothing.
 
 - Goal: a headless summon that takes argv/env and returns one JSON document
   with a meaningful exit code, on `pi-agent-core`'s agent loop.
-- Status: `not started`
+- Status: `contract fixed, implementation not started`
 - Why this matters now: it is the core capability heatmap's recap path needs.
-- Current work: none.
-- Exit criteria: a single summon emits the recap-shaped JSON object heatmap
-  expects, in place of `opencode run`.
+- Current work: contract accepted as DEC-20260808-001 (envelope with
+  `output` + optional session/usage fields; exit codes 0/1/2/3;
+  `--provider`/`--model`/`--effort` on setup's registry; first-class
+  `--system-prompt`; sessions on by default).
+- Exit criteria: a single summon emits the DEC-20260808-001 envelope in
+  place of `opencode run`.
 - Dependencies: `@earendil-works/pi-agent-core`, `@earendil-works/pi-ai`;
   generated `models.json` from setup's registry.
 - Risks: Node memory tax at concurrency (low-teens cap).
@@ -72,6 +75,12 @@ concurrency capped in the low teens; adopt nothing, fork nothing.
 
 ## Recent Changes To Project Reality
 
+- Date: 2026-08-08
+  - Change: Summon contract fixed across sixteen surfaces (DEC-20260808-001).
+  - Why it matters: removes the last blocking decision; all near-term build
+    slices (CLI skeleton, session persistence, models.json consumer,
+    conformance test) are now unblocked and parallelizable.
+  - Related ids: DEC-20260808-001, heatmap RSH-20260808-001
 - Date: 2026-08-08
   - Change: Repository created from repo-template 1.1.5; records seeded.
   - Why it matters: establishes the canonical home for the settled
@@ -93,7 +102,9 @@ concurrency capped in the low teens; adopt nothing, fork nothing.
   - Owner: orchestrator.
   - Trigger: bootstrap commit.
   - Related ids: none.
-- Next: scaffold the CLI summon entrypoint on `pi-agent-core`.
-  - Owner: operator decision → worker agent.
-  - Trigger: operator confirms the first build slice.
-  - Related ids: none.
+- Next: fan out the build slices against DEC-20260808-001 — CLI skeleton on
+  `pi-agent-core`, conformance test, JSONL session persistence, models.json
+  consumer.
+  - Owner: worker agents (parallel).
+  - Trigger: none — contract is fixed.
+  - Related ids: DEC-20260808-001.

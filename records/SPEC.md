@@ -32,7 +32,8 @@ week scope. The harness replaces `opencode run` in that path
 
 ## Core Capabilities
 
-- Headless summon: argv/env in, one JSON document out, meaningful exit code.
+- Headless summon: argv/env in, one JSON envelope out, meaningful exit code
+  (contract fixed by DEC-20260808-001).
 - Provider/model/effort selection driven by a generated `models.json`,
   projected from the operator's canonical registry
   (`~/.config/providers/registry.json`, LPFchan/setup).
@@ -70,9 +71,34 @@ week scope. The harness replaces `opencode run` in that path
 
 ## Main Surfaces
 
-- CLI entrypoint (the summon contract).
+- CLI entrypoint (the summon contract, see below).
 - Generated `models.json` (consumed, not authored here).
 - JSONL session directory (recovery/audit surface for heatmap `adopt`).
+
+## Summon Contract
+
+Fixed by `records/decisions/DEC-20260808-001-cli-summon-contract.md`; that
+record is canonical. Summary:
+
+- **Output**: one JSON envelope on stdout — `output` (assistant text,
+  passed through unvalidated) plus optional `session_id`, `model`,
+  `provider`, `tokens` (heatmap's `TokenCounts` shape), `cost_microdollars`,
+  `duration_ms`. stderr is human-readable diagnostics only.
+- **Exit codes**: 0 success / 1 summon failed in flight / 2 bad invocation /
+  3 harness internal. stdout empty unless 0.
+- **Input**: prompt positional or via stdin; `--system-prompt` /
+  `--system-prompt-file` (first-class, replacing heatmap's prompt-gluing);
+  `--provider` / `--model` / `--effort` selection resolved through setup's
+  registry and the generated `thinkingLevelMap`; cwd defaults to the process
+  cwd with a `--cwd` override.
+- **Sessions**: JSONL at `~/.local/share/miniharness/sessions/` by default,
+  on by default (heatmap's adoption join reads them), `--no-session` opts
+  out, `--session-dir` overrides.
+- **Config**: `models.json` consumed from `PI_CODING_AGENT_DIR`
+  (setup-managed), `--config-dir` override.
+- **Boundaries**: no harness-side timeout (caller owns the deadline), no
+  harness-side concurrency cap (low-teens is operating guidance), opencode's
+  unread `--title` label dropped.
 
 ## Success Criteria
 
