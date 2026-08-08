@@ -1,0 +1,47 @@
+{
+ "_comment": "FIXTURE projection of ~/.config/providers/registry.json (LPFchan/setup) for miniharness slice D. Hand-generated 2026-08-08; the setup-side generator replaces it. `models` is intentionally empty: slice D must merge the Pi built-in/remote catalogue for thinkingLevelMap data, keyed by model id.",
+ "providers": {
+  "grimoire": {
+   "base_url": "https://chat.lost.plus/v1",
+   "provider_type": "OpenAICompatible",
+   "models": []
+  },
+  "crofai": {
+   "base_url": "https://crof.ai/v1",
+   "provider_type": "OpenAICompatible",
+   "models": []
+  },
+  "commandcode": {
+   "base_url": "https://api.commandcode.ai/provider/v1",
+   "provider_type": "OpenAICompatible",
+   "models": [],
+   "default_model": "xiaomi/mimo-v2.5-pro",
+   "tiers": {
+    "haiku": "MiniMaxAI/MiniMax-M3",
+    "sonnet": "xiaomi/mimo-v2.5-pro",
+    "opus": "moonshotai/Kimi-K3"
+   }
+  },
+  "deepseek": {
+   "base_url": "https://api.deepseek.com/v1",
+   "provider_type": "OpenAICompatible",
+   "models": []
+  },
+  "kimicode": {
+   "base_url": "https://api.kimi.com/coding/v1",
+   "provider_type": "OpenAICompatible",
+   "models": [],
+   "default_model": "k3",
+   "tiers": {
+    "haiku": "kimi-for-coding",
+    "sonnet": "k3-256k",
+    "opus": "k3"
+   }
+  },
+  "meta": {
+   "base_url": "https://api.meta.ai/v1",
+   "provider_type": "OpenAICompatible",
+   "models": []
+  }
+ }
+}
