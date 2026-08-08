@@ -37,6 +37,9 @@ week scope. The harness replaces `opencode run` in that path
 - Provider/model/effort selection driven by a generated `models.json`,
   projected from the operator's canonical registry
   (`~/.config/providers/registry.json`, LPFchan/setup).
+- Subscription OAuth reuse: the `anthropic` and `codex` providers run on
+  the operator's existing Claude Code / Codex CLI logins, with refresh
+  write-back to the CLI files (DEC-20260808-002).
 - Resilient retry (408/409/429/5xx, honour `retry-after`).
 - Tool and MCP support, but **no MCP server and no sub-agents by default**;
   both reachable only through explicit extension.

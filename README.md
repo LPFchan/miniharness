@@ -70,6 +70,12 @@ registry providers Pi does not ship (crofai, grimoire, kimicode, …) are
 registered as OpenAI-compatible endpoints whose keys resolve from the
 operator's auth store (`~/.local/share/opencode/auth.json`, the same seam
 setup writes for opencode auth; `MINIHARNESS_AUTH_FILE` overrides for tests).
+The `anthropic` and `codex` providers can instead run on the operator's
+existing CLI subscription logins (DEC-20260808-002): when
+`~/.claude/.credentials.json` or `~/.codex/auth.json` holds OAuth tokens,
+miniharness reuses them, refreshes through pi-ai, and writes rotated tokens
+back to the same files (`MINIHARNESS_CLAUDE_CREDENTIALS_FILE` /
+`MINIHARNESS_CODEX_AUTH_FILE` override for tests).
 When no provider is configured, the CLI exits 2 with a clear message and the
 smoke script skips.
 

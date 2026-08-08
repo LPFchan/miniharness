@@ -11,7 +11,7 @@ Do not use it as a transcript or a scratchpad.
 - Current focus: 0.1.0 released on npm (`npm install -g miniharness`); DEC-20260808-001 fully implemented and proven live on a routed provider.
 - Highest-priority blocker: none.
 - Next operator decision needed: heatmap cutover timing (mid-term track); setup-side registry→models.json generator (setup-repo task).
-- Related decisions: DEC-20260808-001 (CLI summon contract)
+- Related decisions: DEC-20260808-001 (CLI summon contract), DEC-20260808-002 (CLI OAuth credential reuse)
 - Origin research: heatmap `records/research/RSH-20260808-001-miniharness-opencode-replacement.md`
 
 ## Current State Summary
@@ -85,6 +85,20 @@ providers. Nothing forked, nothing adopted beyond the two pinned libraries.
 
 ## Recent Changes To Project Reality
 
+- Date: 2026-08-08
+  - Change: DEC-20260808-002 implemented — miniharness reuses the operator's
+    Claude Code and Codex CLI OAuth logins as the `anthropic` and `codex`
+    providers. A `CliOAuthCredentialStore` translates the CLI file shapes
+    into pi-ai's oauth credential, refreshes through pi-ai's flows, and
+    writes rotated tokens back to the CLI files (atomic, best-effort);
+    registry providers with a live CLI login alias their pi builtin
+    equivalents so routing stays on registry names. Live-verified on both
+    legs: `--provider anthropic` (claude-sonnet-5) and `--provider codex`
+    (gpt-5.6-luna, with refresh write-back to `~/.codex/auth.json`).
+    Suite: 74 tests, 69 pass, 0 fail, 5 live skips.
+  - Why it matters: both subscription quotas are now summonable with no API
+    keys and no new auth enrolment — the same reuse pattern opencodex runs.
+  - Related ids: DEC-20260808-002
 - Date: 2026-08-08
   - Change: 0.1.0 published to npmjs as `miniharness` (public, maintainer
     lpfchan). Packaging: `files: [dist]` whitelist (6-file, ~20 kB tarball),

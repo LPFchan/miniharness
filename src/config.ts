@@ -37,6 +37,14 @@
  * seam setup uses for opencode auth; `MINIHARNESS_AUTH_FILE` overrides for
  * tests). This is what makes `--provider crofai` stream instead of dying
  * with "Unknown provider".
+ *
+ * DEC-20260808-002: registry providers backed by an existing CLI OAuth
+ * login (`anthropic` via Claude Code's credentials, `codex` via the Codex
+ * CLI's auth.json) instead alias a Pi builtin provider — same id, auth,
+ * and API wiring — so the summon routes on the registry name while auth
+ * resolves from the `CliOAuthCredentialStore`. When the CLI credential
+ * file is absent these aliases are skipped: `anthropic` falls back to its
+ * env-var resolution, `codex` to the OpenAI-compatible registration.
  */
 
 import { readFileSync, readdirSync } from "node:fs";
@@ -52,6 +60,8 @@ import {
 } from "@earendil-works/pi-ai";
 import { stream as openaiCompletionsStream, streamSimple as openaiCompletionsStreamSimple } from "@earendil-works/pi-ai/api/openai-completions";
 import { builtinProviders } from "@earendil-works/pi-ai/providers/all";
+import { claudeCredentialsFile, codexAuthFile, CliOAuthCredentialStore } from "./cli-oauth.js";
+import { existsSync } from "node:fs";
 
 /** DEC tier names, in the registry's conventional order. */
 export const TIER_NAMES = ["haiku", "sonnet", "opus"] as const;
@@ -204,6 +214,46 @@ export function registerCustomProviders(
     });
     models.setProvider(provider);
   }
+}
+
+/**
+ * DEC-20260808-002: registry name -> { builtin provider id, CLI credential
+ * file }. When the credential file exists the registry provider aliases the
+ * builtin (same auth/api wiring, registry id for routing); when it does
+ * not, the provider keeps its ordinary registration.
+ */
+const CLI_OAUTH_ALIASES: Record<string, { builtinId: string; credentialFile: () => string }> = {
+  anthropic: { builtinId: "anthropic", credentialFile: () => claudeCredentialsFile() },
+  codex: { builtinId: "openai-codex", credentialFile: () => codexAuthFile() },
+};
+
+/**
+ * Alias registry providers with a live CLI OAuth login onto their Pi
+ * builtin equivalents (DEC-20260808-002). The alias shares the builtin's
+ * auth (OAuth flows, refresh client ids) and API wiring; only the id and
+ * display name follow the registry. Registered after
+ * `registerCustomProviders` so the alias wins over both the builtin (same
+ * id, for `anthropic`) and any generic OpenAI-compatible registration
+ * (for `codex`).
+ */
+export function registerCliOAuthProviders(models: MutableModels, config: Config): void {
+  const builtinsById = new Map(builtinProviders().map((provider) => [provider.id, provider]));
+  for (const [name, alias] of Object.entries(CLI_OAUTH_ALIASES)) {
+    if (config.providers[name] === undefined) continue;
+    if (!existsSync(alias.credentialFile())) continue;
+    const builtin = builtinsById.get(alias.builtinId);
+    if (builtin === undefined) continue;
+    models.setProvider({ ...builtin, id: name, name });
+  }
+}
+
+/**
+ * Build the summon-path credential store (DEC-20260808-002): CLI OAuth
+ * files for `anthropic`/`codex`, nothing else. Pass to
+ * `createModels({ credentials })`.
+ */
+export function createCliOAuthCredentialStore(): CliOAuthCredentialStore {
+  return new CliOAuthCredentialStore();
 }
 
 /**

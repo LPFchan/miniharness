@@ -42,8 +42,10 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import {
   ConfigError,
+  createCliOAuthCredentialStore,
   loadConfig,
   registerCustomProviders,
+  registerCliOAuthProviders,
   resolveConfig,
   resolveConfigDir,
 } from "./config.js";
@@ -548,14 +550,21 @@ async function main(): Promise<void> {
   }
   const resolved = resolveModel(flags);
 
-  const models = createModels();
+  // DEC-20260808-002: the credential store reads the operator's Claude
+  // Code / Codex CLI OAuth logins and writes refreshed tokens back.
+  const models = createModels({ credentials: createCliOAuthCredentialStore() });
   for (const provider of builtinProviders()) {
     models.setProvider(provider);
   }
   // Registry providers Pi does not ship (crofai, grimoire, kimicode, …)
   // stream through OpenAI-compatible endpoints registered from the
   // projection + setup's auth store.
-  registerCustomProviders(models, loadConfig(resolveConfigDir(flags.configDir)));
+  const config = loadConfig(resolveConfigDir(flags.configDir));
+  registerCustomProviders(models, config);
+  // DEC-20260808-002: registry providers with a live CLI OAuth login
+  // (anthropic, codex) alias their Pi builtin equivalents so auth resolves
+  // from the store above. Must run after registerCustomProviders to win.
+  registerCliOAuthProviders(models, config);
 
   // Test-only seam: register an extra provider (e.g. the compaction test's
   // stub) so behavior can be exercised without network or credentials. The
