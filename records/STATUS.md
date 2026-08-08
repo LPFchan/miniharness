@@ -70,7 +70,11 @@ providers. Nothing forked, nothing adopted beyond the two pinned libraries.
   config-dir, help), JSONL sessions on by default, adoption-join probe,
   registry custom providers (crofai et al. as OpenAI-compatible endpoints
   keyed from setup's auth store), and a fault-injection hook for the exit-1
-  path. Suite: 58 tests, 53 pass, 0 fail, 5 live skips, 0 todo. Live-verified
+  path. Compaction (SPEC core capability) is wired in: `--compaction
+  off|auto` (default auto) runs pi-agent-core's compaction on a completed
+  transcript that would overflow the context window and persists the
+  compaction entry to the session JSONL; the DEC envelope is unchanged.
+  Suite: 64 tests, 59 pass, 0 fail, 5 live skips, 0 todo. Live-verified
   on crofai (deepseek-v4-flash-0731): exit 0 envelope + session JSONL +
   stage-key probe recovery.
 - Exit criteria: met pending heatmap cutover.
@@ -81,6 +85,19 @@ providers. Nothing forked, nothing adopted beyond the two pinned libraries.
 
 ## Recent Changes To Project Reality
 
+- Date: 2026-08-08
+  - Change: Compaction wired into the summon path (mutual-agreement
+    delegation, crofai/deepseek-v4-flash-0731 codex-leg subagent
+    implemented, parent reviewed and committed). Known boundary recorded by
+    the implementer: `--compaction auto` compacts completed transcripts; it
+    does not rescue a summon that overflows in flight (that would be a
+    pre-prompt check — a separate decision if ever needed). Chunk-and-merge
+    for monster sessions is heatmap's orchestration concern, not the
+    harness's: miniharness is summoned once per chunk and once for the
+    merge, keeping the no-subagents invariant intact.
+  - Why it matters: closes the last SPEC core-capability gap; settles where
+    large-transcript handling lives ahead of the heatmap cutover.
+  - Related ids: DEC-20260808-001, LOG-20260808-184530-odexk3
 - Date: 2026-08-08
   - Change: Wave 2 fanned out (slices C/D/E) and merged with live-fire
     integration fixes: custom-provider registration, fixture regeneration
