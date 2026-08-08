@@ -14,7 +14,17 @@
 //    session config. Without slice C there is no JSONL writer, so the session
 //    id stays null and nothing is written; slice C replaces the internals.
 // Exit codes: 0 completed / 1 failed in flight / 2 bad invocation / 3 internal.
-import { Agent, type AgentMessage } from "@earendil-works/pi-agent-core";
+import {
+  Agent,
+  compact,
+  DEFAULT_COMPACTION_SETTINGS,
+  estimateContextTokens,
+  prepareCompaction,
+  shouldCompact,
+  type AgentMessage,
+  type CompactionEntry,
+  type Entry,
+} from "@earendil-works/pi-agent-core";
 import { JsonlSessionRepo, NodeExecutionEnv, Session } from "@earendil-works/pi-agent-core/node";
 import {
   calculateCost,
@@ -23,6 +33,7 @@ import {
   type Api,
   type Model,
   type ModelThinkingLevel,
+  type Models,
   type Usage,
 } from "@earendil-works/pi-ai";
 import { builtinProviders } from "@earendil-works/pi-ai/providers/all";
@@ -73,6 +84,19 @@ interface SessionConfig {
   sessionDir?: string;
 }
 
+/**
+ * The outcome of a compaction attempt: a compactable history that was
+ * compacted, or a reason why no compaction ran. Only `kind: "compacted"`
+ * carries an entry; the other kinds mean the transcript stays as-is.
+ */
+interface CompactionOutcome {
+  kind: "compacted" | "disabled" | "not-needed" | "nothing-to-compact" | "failed";
+  /** Present exactly when kind === "compacted". */
+  entry?: CompactionEntry;
+  /** Human-readable reason for stderr diagnostics when kind === "failed". */
+  error?: string;
+}
+
 /** DEC-20260808-001 (Sessions And Config): default JSONL session directory. */
 const DEFAULT_SESSION_DIR = join(homedir(), ".local", "share", "miniharness", "sessions");
 
@@ -81,6 +105,8 @@ interface Flags {
   provider?: string;
   model?: string;
   effort?: string;
+  /** Compaction mode: "off" or "auto" (default "auto"). */
+  compaction: "off" | "auto";
   systemPrompt?: string;
   systemPromptFile?: string;
   cwd?: string;
@@ -220,17 +246,29 @@ async function assertSessionDirWritable(dir: string): Promise<void> {
 }
 
 /**
- * Open a JSONL session through the library and append the transcript. On any
- * failure (create, append, drain) this rejects so the caller exits DEC code 3
- * - session writes are harness-owned, not summon failures.
+ * Open a JSONL session through the library and append the transcript. When a
+ * compaction entry is supplied it is appended after the messages, which is
+ * exactly how the library persists compaction: a `compaction` entry whose
+ * summary + retainedTail reconstruct the post-compaction context on readback
+ * (the session context transform treats the newest compaction entry as the
+ * head of the branch). On any failure (create, append, drain) this rejects
+ * so the caller exits DEC code 3 - session writes are harness-owned, not
+ * summon failures.
  */
-async function writeSession(messages: AgentMessage[], dir: string): Promise<string> {
+async function writeSession(
+  messages: AgentMessage[],
+  dir: string,
+  compactionEntry?: CompactionEntry,
+): Promise<string> {
   const fs = new NodeExecutionEnv({ cwd: process.cwd() });
   const repo = new JsonlSessionRepo({ fs, sessionsRoot: dir });
   const session: Session = await repo.create({ cwd: process.cwd() });
   const metadata = await session.getMetadata();
   for (const message of messages) {
     await session.appendMessage(message);
+  }
+  if (compactionEntry !== undefined) {
+    await session.appendEntry(compactionEntry, "main");
   }
   await session.getLog();
   await fs.cleanup();
@@ -244,6 +282,86 @@ function fail(message: string): never {
 }
 
 /**
+ * Decide whether the completed transcript needs compaction and, when it does,
+ * run it through the library's compaction machinery.
+ *
+ * Pre-emptive by design: the agent loop never checks context overflow, so an
+ * oversized transcript reaches the provider and fails (or gets truncated)
+ * before we ever see a stop reason. We therefore estimate the transcript
+ * against the model's context window *after* the summon completes and, on
+ * overflow, compact so the follow-up resume keeps working. The library's
+ * DEFAULT_COMPACTION_SETTINGS (enabled, 16 KiB reserved for the summary
+ * prompt + output, ~20 KiB recent tail retained) are used as-is: this is a
+ * single-shot headless summon, and inventing new tuning knobs would violate
+ * "own only the invocation contract".
+ *
+ * The compaction entry produced here is persisted by the caller (if sessions
+ * are on) so the adoption/recovery surface stays truthful.
+ */
+async function maybeCompact(
+  messages: AgentMessage[],
+  model: Model<Api>,
+  models: Models,
+  mode: "off" | "auto",
+): Promise<CompactionOutcome> {
+  if (mode === "off") return { kind: "disabled" };
+  const contextTokens = estimateContextTokens(messages).tokens;
+  if (!shouldCompact(contextTokens, model.contextWindow, DEFAULT_COMPACTION_SETTINGS)) {
+    return { kind: "not-needed" };
+  }
+
+  // prepareCompaction consumes session entries (message entries plus any
+  // prior compaction entry); build a message-only path from the transcript.
+  const pathEntries: Entry[] = messages.map((message, index) => ({
+    type: "message",
+    id: `msg-${index}`,
+    seq: index,
+    parentId: index === 0 ? null : `msg-${index - 1}`,
+    timestamp: message.timestamp,
+    message,
+  }));
+  const preparation = prepareCompaction(pathEntries, DEFAULT_COMPACTION_SETTINGS);
+  if (!preparation.ok) {
+    return {
+      kind: "failed",
+      error: `compaction preparation failed: ${preparation.error.message}`,
+    };
+  }
+  if (preparation.value === undefined) {
+    return { kind: "nothing-to-compact" };
+  }
+
+  const result = await compact(
+    preparation.value,
+    models,
+    model,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+  );
+  if (!result.ok) {
+    return { kind: "failed", error: `compaction failed: ${result.error.message}` };
+  }
+  return {
+    kind: "compacted",
+    entry: {
+      type: "compaction",
+      id: `compaction-${Date.now()}`,
+      seq: pathEntries.length,
+      parentId: pathEntries[pathEntries.length - 1]?.id ?? null,
+      timestamp: Date.now(),
+      summary: result.value.summary,
+      retainedTail: result.value.retainedTail,
+      tokensBefore: result.value.tokensBefore,
+      details: result.value.details,
+      usage: result.value.usage,
+    },
+  };
+}
+
+/**
  * Parse argv into flags + prompt positionals.
  *
  * Grammar: `--flag value`, `--flag=value`, `--` terminator (everything after
@@ -251,13 +369,14 @@ function fail(message: string): never {
  * value, duplicated scalar flag, or more than one positional -> exit 2.
  */
 function parseArgv(argv: string[]): { flags: Flags; positionals: string[] } {
-  const flags: Flags = { noSession: false, help: false };
+  const flags: Flags = { noSession: false, help: false, compaction: "auto" };
   const positionals: string[] = [];
   const seen = new Set<string>();
   const valueFlags = new Map<string, (value: string) => void>([
     ["--provider", (v) => (flags.provider = v)],
     ["--model", (v) => (flags.model = v)],
     ["--effort", (v) => (flags.effort = v)],
+    ["--compaction", (v) => (flags.compaction = parseCompaction(v))],
     ["--system-prompt", (v) => (flags.systemPrompt = v)],
     ["--system-prompt-file", (v) => (flags.systemPromptFile = v)],
     ["--cwd", (v) => (flags.cwd = v)],
@@ -325,16 +444,31 @@ function parseArgv(argv: string[]): { flags: Flags; positionals: string[] } {
   return { flags, positionals };
 }
 
+/**
+ * Validate the --compaction value. Only "off" and "auto" exist; anything
+ * else is a DEC exit-2 usage error.
+ */
+function parseCompaction(value: string): "off" | "auto" {
+  if (value === "off" || value === "auto") return value;
+  usageError(`--compaction must be "off" or "auto" (got "${value}")`);
+}
+
 const USAGE = `Usage: miniharness [options] [prompt]
 
 Headless model summon. Prints one JSON envelope to stdout on success
 (DEC-20260808-001). The prompt is the positional argument, or stdin when no
 positional is given and stdin is not a TTY.
 
+Compaction ("auto", default): when the transcript would overflow the model's
+context window, the library compacts the history into a summary and the
+summon continues instead of failing. "off" disables this. The envelope is
+unchanged either way; the session JSONL records the compaction entry.
+
 Options:
   --provider <name>          Provider enrolled in the registry (models.json)
   --model <id-or-tier>       Model id or tier: haiku | sonnet | opus
   --effort <level>           Thinking level: off|minimal|low|medium|high|xhigh|max
+  --compaction <mode>        Compaction: off | auto (default: auto)
   --system-prompt <text>     System prompt
   --system-prompt-file <path>  System prompt from a file ("-" = stdin)
   --cwd <path>               Working directory (must exist; default: process cwd)
@@ -423,6 +557,15 @@ async function main(): Promise<void> {
   // projection + setup's auth store.
   registerCustomProviders(models, loadConfig(resolveConfigDir(flags.configDir)));
 
+  // Test-only seam: register an extra provider (e.g. the compaction test's
+  // stub) so behavior can be exercised without network or credentials. The
+  // summon path never sets this env var.
+  if (process.env.MINIHARNESS_EXTRA_PROVIDER !== undefined) {
+    const extraProviderPath = process.env.MINIHARNESS_EXTRA_PROVIDER;
+    const { registerTestProvider } = await import(extraProviderPath);
+    registerTestProvider(models);
+  }
+
   // Fault-injection hook (test-only): fail after invocation validation,
   // before the provider is contacted. Maps to DEC exit 1.
   if (process.env.MINIHARNESS_FAIL_AFTER === "provider-connect") {
@@ -470,10 +613,22 @@ async function main(): Promise<void> {
   }
 
   const usage = last.usage;
+  // Compaction runs after the summon completes: the transcript is fixed, the
+  // context-token estimate is trustworthy, and a compaction failure can never
+  // hide a successful reply. The outcome is folded into the session only - the
+  // DEC-20260808-001 envelope keeps its fixed shape.
+  let compactionEntry: CompactionEntry | undefined;
+  const compactionOutcome = await maybeCompact(messages, resolved.model, models, flags.compaction);
+  if (compactionOutcome.kind === "compacted") {
+    compactionEntry = compactionOutcome.entry;
+  } else if (compactionOutcome.kind === "failed") {
+    diagnostic(`compaction skipped: ${compactionOutcome.error}`);
+  }
+
   let sessionId: string | null = null;
   if (session.enabled && session.sessionDir !== undefined) {
     try {
-      sessionId = await writeSession(messages, session.sessionDir);
+      sessionId = await writeSession(messages, session.sessionDir, compactionEntry);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       internalError(`session write failed: ${detail}`);

@@ -88,6 +88,31 @@ test('duplicated scalar flag exits 2', () => {
   assertBadInvocation(['--provider', 'a', '--provider', 'b', 'hi']);
 });
 
+test('--compaction valid values parse', () => {
+  // Any parseable --compaction value must be accepted by the parser; with a
+  // fixture config dir and the fault-injection hook the summon fails at the
+  // injected provider-connect step (exit 1), proving validation passed.
+  for (const mode of ['off', 'auto']) {
+    const dir = fixtureConfigDir();
+    const { status, stdout, stderr } = runHarness(
+      ['--config-dir', dir, '--provider', 'kimicode', '--model', 'sonnet', '--effort', 'low', '--compaction', mode, 'hi'],
+      { env: { ...process.env, MINIHARNESS_FAIL_AFTER: 'provider-connect' } },
+    );
+    assert.equal(status, 1, `--compaction ${mode} must reach the injected failure (got ${status}); stderr: ${stderr}`);
+    assert.equal(stdout, '', 'stdout must be empty on failure');
+  }
+});
+
+test('--compaction invalid value exits 2 naming the allowed set', () => {
+  const { stderr } = assertBadInvocation(['--compaction', 'sometimes', 'hi']);
+  assert.match(stderr, /--compaction must be "off" or "auto"/);
+});
+
+test('--compaction=value syntax works', () => {
+  const { stderr } = assertBadInvocation(['--compaction=bogus', 'hi']);
+  assert.match(stderr, /--compaction must be "off" or "auto"/);
+});
+
 test('more than one positional prompt exits 2', () => {
   assertBadInvocation(['one', 'two']);
 });
@@ -102,6 +127,7 @@ test('--help prints usage on stdout and exits 0', () => {
   assert.match(stdout, /Usage: miniharness/);
   assert.match(stdout, /--system-prompt/);
   assert.match(stdout, /--config-dir/);
+  assert.match(stdout, /--compaction/);
   assert.equal(stderr, '', 'stderr must be empty on --help');
 });
 
