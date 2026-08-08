@@ -30,15 +30,31 @@ concurrency capped in the low teens; adopt nothing, fork nothing.
 ### Repository Bootstrap
 
 - Goal: adopt the repo-template scaffold and seed canonical records.
-- Status: `in progress`
+- Status: `done`
 - Why this matters now: the research is settled; the project needs a canonical
   home before implementation begins.
-- Current work: scaffold copied, records seeded, hooks to be wired, pushed to
-  `LPFchan/miniharness` (private).
+- Current work: scaffold copied, records seeded, hooks wired, pushed to
+  `LPFchan/miniharness` (private). `upstream-intake/` enabled, scoped to the
+  Pi agent libraries.
 - Exit criteria: scaffold present, truth docs seeded, hooks enabled, remote set.
 - Dependencies: `LPFchan/repo-template` 1.1.5.
 - Risks: none.
 - Related ids: none yet.
+
+### Upstream Intake (Pi libraries)
+
+- Goal: recurring review of upstream Pi releases against the pinned version,
+  so contract changes (loop API, session JSONL, `models.json` schema) are
+  caught deliberately rather than by breakage.
+- Status: `not started`
+- Why this matters now: the harness rides Pi's weekly release cadence without
+  forking; that only works if upstream is actually watched.
+- Current work: module enabled, scope declared in
+  `records/upstream-intake/SCOPE.md`.
+- Exit criteria: first weekly intake reviewed once the harness pins a version.
+- Dependencies: a pinned `@earendil-works/pi-*` version (post-implementation).
+- Risks: none before implementation; the module is dormant until then.
+- Related ids: heatmap RSH-20260808-001.
 
 ### CLI Summon Contract
 

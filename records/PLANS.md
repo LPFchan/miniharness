@@ -61,6 +61,11 @@ Do not put raw brainstorms or untriaged intake here.
     expected output shape.
   - Dependencies: CLI summon contract; heatmap config change.
   - Related ids: heatmap `src/recap/mod.rs`.
+- Initiative: first upstream intake review of the pinned Pi version.
+  - Why later: meaningful only once a `@earendil-works/pi-*` version is pinned;
+    then runs weekly against new releases.
+  - Dependencies: implementation pins a version; `upstream-intake/SCOPE.md`.
+  - Related ids: `records/upstream-intake/SCOPE.md`.
 - Initiative: concurrency load test on the real host.
   - Why later: measures the Node tax at the actual burst; gates the
     low-teens cap.
