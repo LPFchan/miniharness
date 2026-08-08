@@ -20,7 +20,6 @@ import {
   calculateCost,
   contentText,
   createModels,
-  getSupportedThinkingLevels,
   type Api,
   type Model,
   type ModelThinkingLevel,
@@ -30,6 +29,13 @@ import { builtinProviders } from "@earendil-works/pi-ai/providers/all";
 import { readFileSync, statSync, writeSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import {
+  ConfigError,
+  loadConfig,
+  registerCustomProviders,
+  resolveConfig,
+  resolveConfigDir,
+} from "./config.js";
 
 /** Fixed by DEC-20260808-001: every field except `output` may be null. */
 interface Envelope {
@@ -48,33 +54,7 @@ interface Envelope {
   duration_ms: number | null;
 }
 
-/** DEC tier names, matching slice D's TIER_NAMES. */
-const TIER_NAMES = ["haiku", "sonnet", "opus"] as const;
-type TierName = (typeof TIER_NAMES)[number];
-
-/** Registry tier map on a provider entry. */
-interface TierMap {
-  haiku?: string;
-  sonnet?: string;
-  opus?: string;
-}
-
-/** One provider entry in the generated models.json. */
-interface ProviderEntry {
-  base_url?: string;
-  provider_type?: string;
-  models?: unknown[];
-  default_model?: string;
-  tiers?: TierMap;
-  [key: string]: unknown;
-}
-
-/** `{ providers: { <name>: ProviderEntry } }`, as generated from the registry. */
-interface Config {
-  providers: Record<string, ProviderEntry>;
-}
-
-/** The outcome of resolveModel(); slice D's ResolvedModel swaps in at merge. */
+/** The outcome of resolveModel() for the summon path. */
 interface ResolvedModel {
   /** Library Model the summon runs on (pi provider id, baseUrl overridden). */
   model: Model<Api>;
@@ -169,201 +149,32 @@ async function readStdinIfPiped(): Promise<string> {
   return Buffer.concat(chunks).toString("utf8");
 }
 
-/** Config dir precedence: --config-dir > PI_CODING_AGENT_DIR > ~/.pi/agent/. */
-function configDirOf(flags: Flags): string {
-  if (flags.configDir !== undefined && flags.configDir !== "") return flags.configDir;
-  const envDir = process.env.PI_CODING_AGENT_DIR;
-  if (envDir !== undefined && envDir !== "") return envDir;
-  return join(homedir(), ".pi", "agent");
-}
-
-/** Load and schema-check <configDir>/models.json. Missing/invalid -> exit 2. */
-function loadConfig(configDir: string): Config {
-  const path = join(configDir, "models.json");
-  let raw: string;
-  try {
-    raw = readFileSync(path, "utf8");
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    usageError(`config: cannot read ${path}: ${detail}`);
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    usageError(`config: invalid JSON in ${path}: ${detail}`);
-  }
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    usageError(`config: ${path} must be a JSON object with a "providers" map`);
-  }
-  const providers = (parsed as { providers?: unknown }).providers;
-  if (typeof providers !== "object" || providers === null || Array.isArray(providers)) {
-    usageError(`config: ${path} is missing a "providers" map`);
-  }
-  const normalized: Record<string, ProviderEntry> = {};
-  for (const [name, entry] of Object.entries(providers as Record<string, unknown>)) {
-    normalized[name] =
-      typeof entry === "object" && entry !== null && !Array.isArray(entry)
-        ? (entry as ProviderEntry)
-        : {};
-  }
-  return { providers: normalized };
-}
-
 /**
- * Build the model catalogue from Pi's builtin providers (static, sync, no
- * network) — the same wiring the summon path uses.
- */
-function catalogueModels(): Model<Api>[] {
-  const models = createModels();
-  for (const provider of builtinProviders()) {
-    models.setProvider(provider);
-  }
-  return models.getModels() as Model<Api>[];
-}
-
-/** Look up a model id across the catalogue; prefer a provider-name match. */
-function catalogueModel(
-  catalogue: readonly Model<Api>[],
-  id: string,
-  providerName: string,
-): Model<Api> | undefined {
-  const matches = catalogue.filter((model) => model.id === id);
-  if (matches.length === 0) return undefined;
-  const sameName = matches.find((model) => model.provider === providerName);
-  return sameName ?? matches[0]!;
-}
-
-function isTierName(value: string): value is TierName {
-  return (TIER_NAMES as readonly string[]).includes(value);
-}
-
-function isThinkingLevel(value: string): value is ModelThinkingLevel {
-  return (
-    value === "off" ||
-    value === "minimal" ||
-    value === "low" ||
-    value === "medium" ||
-    value === "high" ||
-    value === "xhigh" ||
-    value === "max"
-  );
-}
-
-/**
- * Resolve provider + model + effort against <configDir>/models.json.
- * SEAM: slice D's src/config.ts resolveConfig() replaces the internals at
- * integration (same call shape, same ResolvedModel semantics). Until then
- * this is the minimal direct validation that makes the conformance gates
- * green: unknown provider, unknown model/tier, unsupported effort, and
- * missing config all exit 2 naming the valid set.
+ * Resolve provider + model + effort through slice D's config module
+ * (src/config.ts). ConfigError maps to DEC exit 2 with the module's
+ * one-line message; resolution is pure, sync, and network-free.
  */
 function resolveModel(flags: Flags): ResolvedModel {
-  const configDir = configDirOf(flags);
-  const config = loadConfig(configDir);
-  const names = Object.keys(config.providers);
-
-  const providerName = flags.provider ?? names[0];
-  if (!providerName) {
-    usageError("config has no providers enrolled");
-  }
-  const provider = config.providers[providerName];
-  if (!provider) {
-    const list = names.length === 0 ? "none enrolled" : `enrolled: ${names.join(", ")}`;
-    usageError(`provider "${providerName}" is not enrolled (${list})`);
-  }
-
-  const tiers = provider.tiers;
-  let id: string | undefined;
-
-  if (flags.model === undefined || flags.model === "") {
-    id = provider.default_model;
-  } else if (isTierName(flags.model)) {
-    if (!tiers || typeof tiers !== "object") {
-      usageError(
-        `provider "${providerName}" has no tier map: tier "${flags.model}" cannot be resolved (use an explicit model id)`,
-      );
-    }
-    id = tiers[flags.model];
-    if (!id || typeof id !== "string" || id === "") {
-      usageError(
-        `provider "${providerName}" has no ${flags.model} tier (tier map: ${TIER_NAMES.map((t) => `${t}=${tiers[t] ?? "?"}`).join(", ")})`,
-      );
-    }
-  } else {
-    id = flags.model;
-  }
-
-  if (!id || id === "") {
-    const hasTiers = tiers && typeof tiers === "object" && Object.keys(tiers).length > 0;
-    const hint = hasTiers
-      ? ` (tiers available: ${TIER_NAMES.filter((t) => tiers[t]).join(", ")})`
-      : "";
-    usageError(
-      `provider "${providerName}" has no default_model; pass --model <id-or-tier>${hint}`,
-    );
-  }
-
-  // The id must be known to the registry projection or the pi catalogue.
-  const fixtureModels = Array.isArray(provider.models) ? provider.models : [];
-  const inFixture = fixtureModels.some((entry) => {
-    if (typeof entry !== "object" || entry === null) return false;
-    const entryId = (entry as Record<string, unknown>)["id"] ?? (entry as Record<string, unknown>)["model"];
-    return entryId === id;
-  });
-  const catalogue = catalogueModels();
-  const catalogueEntry = catalogueModel(catalogue, id, providerName);
-  if (!inFixture && !catalogueEntry) {
-    usageError(
-      `unknown model "${id}" for provider "${providerName}" (not in the registry projection or the pi catalogue)`,
-    );
-  }
-
-  let model: Model<Api>;
-  if (catalogueEntry) {
-    model = {
-      ...catalogueEntry,
-      id,
-      baseUrl: provider.base_url ?? catalogueEntry.baseUrl,
+  const configDir = resolveConfigDir(flags.configDir);
+  try {
+    const resolved = resolveConfig(configDir, {
+      provider: flags.provider,
+      model: flags.model,
+      effort: flags.effort,
+    });
+    return {
+      model: resolved.model,
+      thinkingLevel: resolved.thinkingLevel,
+      providerName: resolved.providerName,
+      modelId: resolved.model.id,
     };
-  } else {
-    // Fixture entry present, catalogue absent: construct a minimal model.
-    model = {
-      id,
-      name: id,
-      api: "openai-completions",
-      provider: providerName,
-      baseUrl: provider.base_url ?? "http://localhost/v1",
-      reasoning: true,
-      input: ["text"],
-      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-      contextWindow: 128_000,
-      maxTokens: 8_192,
-    };
-  }
-
-  // Effort validation: supported levels come from the model's thinkingLevelMap
-  // via the library's own authority (same call slice D uses).
-  let thinkingLevel: ModelThinkingLevel = "off";
-  if (flags.effort !== undefined && flags.effort !== "") {
-    if (!isThinkingLevel(flags.effort)) {
-      usageError(
-        `effort "${flags.effort}" is not a thinking level (valid: off, minimal, low, medium, high, xhigh, max)`,
-      );
+  } catch (error) {
+    if (error instanceof ConfigError) {
+      usageError(error.message);
     }
-    const supported = getSupportedThinkingLevels(model);
-    if (!supported.includes(flags.effort as ModelThinkingLevel)) {
-      usageError(
-        `model "${id}" does not support effort "${flags.effort}" (supported: ${supported.join(", ") || "none"})`,
-      );
-    }
-    thinkingLevel = flags.effort as ModelThinkingLevel;
+    throw error;
   }
-
-  return { model, thinkingLevel, providerName, modelId: id };
 }
-
 /**
  * Resolve the session configuration from flags.
  * Sessions are on by default (DEC-20260808-001): the summon appends a JSONL
@@ -607,6 +418,10 @@ async function main(): Promise<void> {
   for (const provider of builtinProviders()) {
     models.setProvider(provider);
   }
+  // Registry providers Pi does not ship (crofai, grimoire, kimicode, …)
+  // stream through OpenAI-compatible endpoints registered from the
+  // projection + setup's auth store.
+  registerCustomProviders(models, loadConfig(resolveConfigDir(flags.configDir)));
 
   // Fault-injection hook (test-only): fail after invocation validation,
   // before the provider is contacted. Maps to DEC exit 1.

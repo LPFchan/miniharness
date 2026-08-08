@@ -28,22 +28,40 @@
  * These functions are pure: no argv, no process.exit, no network, no
  * credentials. Every failure is a typed `ConfigError` whose `message` is a
  * one-line human string the CLI renders as DEC exit 2.
+ *
+ * Custom providers: a registry provider that is not a Pi builtin id
+ * (crofai, grimoire, kimicode, …) is registered onto the summon-path
+ * `Models` instance by `registerCustomProviders()` as an OpenAI-compatible
+ * endpoint — `baseUrl` from the projection, API key resolved from setup's
+ * auth store (`~/.local/share/opencode/auth.json`, the same writer/reader
+ * seam setup uses for opencode auth; `MINIHARNESS_AUTH_FILE` overrides for
+ * tests). This is what makes `--provider crofai` stream instead of dying
+ * with "Unknown provider".
  */
 
 import { readFileSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import {
+  createProvider,
   createModels,
   getSupportedThinkingLevels,
   type Model,
   type ModelThinkingLevel,
+  type MutableModels,
 } from "@earendil-works/pi-ai";
+import { stream as openaiCompletionsStream, streamSimple as openaiCompletionsStreamSimple } from "@earendil-works/pi-ai/api/openai-completions";
 import { builtinProviders } from "@earendil-works/pi-ai/providers/all";
 
 /** DEC tier names, in the registry's conventional order. */
 export const TIER_NAMES = ["haiku", "sonnet", "opus"] as const;
 export type TierName = (typeof TIER_NAMES)[number];
+
+/** Auth store the projection points at (setup's opencode writer seam). */
+const DEFAULT_AUTH_FILE = join(homedir(), ".local", "share", "opencode", "auth.json");
+
+/** Env override for the auth store path (tests). */
+const AUTH_FILE_ENV = "MINIHARNESS_AUTH_FILE";
 
 /** Registry tier map on a provider entry (`--model haiku|sonnet|opus`). */
 export interface TierMap {
@@ -124,6 +142,68 @@ export function createCatalogue(): Catalogue {
     models.setProvider(provider);
   }
   return { models: models.getModels() };
+}
+
+/** Provider ids Pi ships as builtins (lowercase for matching). */
+function builtinProviderIds(): Set<string> {
+  return new Set(builtinProviders().map((provider) => provider.id.toLowerCase()));
+}
+
+/** Read one provider's API key from setup's auth store; undefined when absent. */
+function readAuthKey(providerName: string, authFile: string): string | undefined {
+  let raw: string;
+  try {
+    raw = readFileSync(authFile, "utf8");
+  } catch {
+    return undefined;
+  }
+  try {
+    const parsed = JSON.parse(raw) as Record<string, { key?: unknown }>;
+    const key = parsed[providerName]?.key;
+    return typeof key === "string" && key !== "" ? key : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Register registry providers Pi does not ship as builtins onto a
+ * summon-path `Models` instance, as OpenAI-compatible endpoints. `baseUrl`
+ * comes from the projection; the API key resolves from setup's auth store
+ * (`MINIHARNESS_AUTH_FILE` override) per call, so nothing secret is cached
+ * in the config layer. Providers already known to Pi are left untouched.
+ */
+export function registerCustomProviders(
+  models: MutableModels,
+  config: Config,
+  authFile: string = process.env[AUTH_FILE_ENV] ?? DEFAULT_AUTH_FILE,
+): void {
+  const builtins = builtinProviderIds();
+  for (const [name, entry] of Object.entries(config.providers)) {
+    if (builtins.has(name.toLowerCase())) continue;
+    const provider = createProvider({
+      id: name,
+      name,
+      baseUrl: entry.base_url,
+      auth: {
+        apiKey: {
+          name: `${name} API key`,
+          resolve: async () => {
+            const key = readAuthKey(name, authFile);
+            return key === undefined ? undefined : { auth: { apiKey: key }, source: authFile };
+          },
+        },
+      },
+      models: [],
+      api: {
+        "openai-completions": {
+          stream: openaiCompletionsStream,
+          streamSimple: openaiCompletionsStreamSimple,
+        },
+      },
+    });
+    models.setProvider(provider);
+  }
 }
 
 /**

@@ -50,10 +50,13 @@ function tmpConfigDir(contents) {
 const COMMANDCODE = "commandcode";
 const KIMICODE = "kimicode";
 
-test("fixture loads: six enrolled providers, two with tiers/defaults", () => {
+test("fixture loads: eight enrolled providers, four with tiers/defaults", () => {
   const config = fixtureConfig();
   const names = Object.keys(config.providers).sort();
-  assert.deepEqual(names, ["commandcode", "crofai", "deepseek", "grimoire", "kimicode", "meta"]);
+  assert.deepEqual(names, ["anthropic", "codex", "commandcode", "crofai", "deepseek", "grimoire", "kimicode", "meta"]);
+  assert.equal(config.providers.anthropic.default_model, "claude-sonnet-5");
+  assert.equal(config.providers.anthropic.tiers.haiku, "claude-haiku-4-5");
+  assert.equal(config.providers.codex.default_model, "gpt-5.6-sol");
   assert.equal(config.providers[COMMANDCODE].default_model, "xiaomi/mimo-v2.5-pro");
   assert.deepEqual(config.providers[COMMANDCODE].tiers, {
     haiku: "MiniMaxAI/MiniMax-M3",

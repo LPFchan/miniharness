@@ -35,11 +35,18 @@ export function stageKey(prompt) {
 }
 
 /** Collect assistant text parts from a parsed JSONL session, in order. */
+/** Message payload of an entry line: top-level (pi JSONL v4) or nested. */
+function messageOf(line) {
+  if (line.type === "message") return line.message;
+  if (line.entry?.type === "message") return line.entry.message;
+  return undefined;
+}
+
 function assistantParts(parsed) {
   const parts = [];
   for (const line of parsed) {
-    if (line.kind !== "entry" || line.entry?.type !== "message") continue;
-    const message = line.entry.message;
+    if (line.kind !== "entry") continue;
+    const message = messageOf(line);
     if (message?.role !== "assistant") continue;
     if (typeof message.content === "string") {
       const text = message.content.trim();
@@ -100,8 +107,8 @@ function probeFile(file) {
   const sessionId = sessionIdFromFile(basename(file));
   let prompt = null;
   for (const line of parsed) {
-    if (line.kind !== "entry" || line.entry?.type !== "message") continue;
-    const message = line.entry.message;
+    if (line.kind !== "entry") continue;
+    const message = messageOf(line);
     if (message?.role !== "user") continue;
     const text = typeof message.content === "string"
       ? message.content
@@ -122,23 +129,36 @@ function probeFile(file) {
   };
 }
 
-/** Walk a session dir and probe every `.jsonl` file. */
+/**
+ * Walk a session dir and probe every `.jsonl` file, recursing into
+ * subdirectories: JsonlSessionRepo namespaces sessions under a cwd-derived
+ * directory (`<root>/<--cwd-slug-->/<timestamp>_<id>.jsonl`).
+ */
 export function probeSessionDir(dir) {
+  const reports = [];
+  walk(dir, reports);
+  reports.sort((a, b) => (a.file < b.file ? -1 : a.file > b.file ? 1 : 0));
+  return reports;
+}
+
+function walk(dir, reports) {
   let entries;
   try {
     entries = readdirSync(dir, { withFileTypes: true });
   } catch (error) {
     throw new Error(`cannot read session dir ${dir}: ${error.message}`);
   }
-  const reports = [];
   for (const entry of entries) {
-    if (entry.isDirectory() || !entry.name.endsWith(".jsonl")) continue;
-    const file = join(dir, entry.name);
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      walk(path, reports);
+      continue;
+    }
+    if (!entry.name.endsWith(".jsonl")) continue;
+    const file = path;
     const report = probeFile(file);
     if (report !== null) reports.push(report);
   }
-  reports.sort((a, b) => (a.file < b.file ? -1 : a.file > b.file ? 1 : 0));
-  return reports;
 }
 
 function main() {

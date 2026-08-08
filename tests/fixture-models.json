@@ -1,6 +1,28 @@
 {
- "_comment": "FIXTURE projection of ~/.config/providers/registry.json (LPFchan/setup) for miniharness slice D. Hand-generated 2026-08-08; the setup-side generator replaces it. `models` is intentionally empty: slice D must merge the Pi built-in/remote catalogue for thinkingLevelMap data, keyed by model id.",
+ "_comment": "FIXTURE projection of ~/.config/providers/registry.json (LPFchan/setup) for miniharness slice D. Regenerated 2026-08-08 with profile-enabled providers included (anthropic/codex carry enrollment via profiles). Hand-generated; the setup-side generator replaces it. `models` is intentionally empty: per-model capability data (thinkingLevelMap) comes from the Pi catalogue, merged by model id.",
  "providers": {
+  "codex": {
+   "base_url": "https://chatgpt.com/backend-api/codex",
+   "provider_type": "OpenAIResponses",
+   "models": [],
+   "default_model": "gpt-5.6-sol",
+   "tiers": {
+    "haiku": "gpt-5.6-luna",
+    "sonnet": "gpt-5.6-terra",
+    "opus": "gpt-5.6-sol"
+   }
+  },
+  "anthropic": {
+   "base_url": "https://api.anthropic.com",
+   "provider_type": "DirectAnthropic",
+   "models": [],
+   "default_model": "claude-sonnet-5",
+   "tiers": {
+    "haiku": "claude-haiku-4-5",
+    "sonnet": "claude-sonnet-5",
+    "opus": "claude-opus-5"
+   }
+  },
   "grimoire": {
    "base_url": "https://chat.lost.plus/v1",
    "provider_type": "OpenAICompatible",
