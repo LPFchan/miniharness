@@ -14,7 +14,8 @@
 //    session config. Without slice C there is no JSONL writer, so the session
 //    id stays null and nothing is written; slice C replaces the internals.
 // Exit codes: 0 completed / 1 failed in flight / 2 bad invocation / 3 internal.
-import { Agent } from "@earendil-works/pi-agent-core";
+import { Agent, type AgentMessage } from "@earendil-works/pi-agent-core";
+import { JsonlSessionRepo, NodeExecutionEnv, Session } from "@earendil-works/pi-agent-core/node";
 import {
   calculateCost,
   contentText,
@@ -88,9 +89,12 @@ interface ResolvedModel {
 /** Session configuration resolved by openSession(). */
 interface SessionConfig {
   enabled: boolean;
-  /** Session dir when sessions are on (may be undefined before slice C). */
+  /** Session dir when sessions are on. */
   sessionDir?: string;
 }
+
+/** DEC-20260808-001 (Sessions And Config): default JSONL session directory. */
+const DEFAULT_SESSION_DIR = join(homedir(), ".local", "share", "miniharness", "sessions");
 
 /** Every flag the DEC defines. */
 interface Flags {
@@ -362,10 +366,8 @@ function resolveModel(flags: Flags): ResolvedModel {
 
 /**
  * Resolve the session configuration from flags.
- * SEAM: slice C's session wiring replaces the internals at integration.
- * Without slice C, --session-dir is accepted and ignored for writing and
- * session_id stays null (the DEC allows a null session_id); no JSONL is
- * written here — slice C owns the writer.
+ * Sessions are on by default (DEC-20260808-001): the summon appends a JSONL
+ * session through the library's JsonlSessionRepo into the resolved dir.
  */
 function openSession(flags: Flags): SessionConfig {
   if (flags.noSession) {
@@ -376,8 +378,52 @@ function openSession(flags: Flags): SessionConfig {
   }
   return {
     enabled: true,
-    sessionDir: flags.sessionDir ?? process.env.MINIHARNESS_SESSION_DIR,
+    sessionDir: flags.sessionDir ?? process.env.MINIHARNESS_SESSION_DIR ?? DEFAULT_SESSION_DIR,
   };
+}
+
+/**
+ * Fail fast on an unwritable session dir (DEC exit 3) before any provider
+ * call, so a broken session path never costs a summon. `NodeExecutionEnv`
+ * returns errors as `Result`s and must never throw, so the whole probe is
+ * wrapped in the same try/catch as the write path.
+ */
+async function assertSessionDirWritable(dir: string): Promise<void> {
+  const fs = new NodeExecutionEnv({ cwd: process.cwd() });
+  try {
+    const created = await fs.createDir(dir, { recursive: true });
+    if (!created.ok) {
+      internalError(`session dir not writable: ${created.error.message}`);
+    }
+    const probe = await fs.appendFile(join(dir, ".miniharness-write-probe"), "");
+    if (!probe.ok) {
+      internalError(`session dir not writable: ${probe.error.message}`);
+    }
+    await fs.remove(join(dir, ".miniharness-write-probe"), { force: true });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    internalError(`session dir not writable: ${detail}`);
+  } finally {
+    await fs.cleanup();
+  }
+}
+
+/**
+ * Open a JSONL session through the library and append the transcript. On any
+ * failure (create, append, drain) this rejects so the caller exits DEC code 3
+ * - session writes are harness-owned, not summon failures.
+ */
+async function writeSession(messages: AgentMessage[], dir: string): Promise<string> {
+  const fs = new NodeExecutionEnv({ cwd: process.cwd() });
+  const repo = new JsonlSessionRepo({ fs, sessionsRoot: dir });
+  const session: Session = await repo.create({ cwd: process.cwd() });
+  const metadata = await session.getMetadata();
+  for (const message of messages) {
+    await session.appendMessage(message);
+  }
+  await session.getLog();
+  await fs.cleanup();
+  return metadata.id;
 }
 
 function fail(message: string): never {
@@ -551,9 +597,11 @@ async function main(): Promise<void> {
   }
 
   // Provider/model/effort validation happens before any network or summon.
-  const resolved = resolveModel(flags);
   const session = openSession(flags);
-  void session; // session writing lands with slice C; session_id stays null.
+  if (session.enabled && session.sessionDir !== undefined) {
+    await assertSessionDirWritable(session.sessionDir);
+  }
+  const resolved = resolveModel(flags);
 
   const models = createModels();
   for (const provider of builtinProviders()) {
@@ -607,9 +655,19 @@ async function main(): Promise<void> {
   }
 
   const usage = last.usage;
+  let sessionId: string | null = null;
+  if (session.enabled && session.sessionDir !== undefined) {
+    try {
+      sessionId = await writeSession(messages, session.sessionDir);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      internalError(`session write failed: ${detail}`);
+    }
+  }
+
   const envelope: Envelope = {
     output: contentText(last.content),
-    session_id: null, // sessions are slice C
+    session_id: sessionId,
     model: last.model ?? resolved.modelId,
     provider: last.provider ?? resolved.providerName,
     tokens:
