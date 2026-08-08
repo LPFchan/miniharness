@@ -1,0 +1,83 @@
+# miniharness Status
+
+This document tracks current operational truth.
+Update it when the project's real state changes.
+Do not use it as a transcript or a scratchpad.
+
+## Snapshot
+
+- Last updated: 2026-08-08
+- Overall posture: `active`
+- Current focus: repository bootstrap; research settled, implementation not started.
+- Highest-priority blocker: none — repo scaffold in place, no code yet.
+- Next operator decision needed: confirm the first build slice (CLI summon contract on `pi-agent-core`).
+- Related decisions: pending (see `records/decisions/`)
+- Origin research: heatmap `records/research/RSH-20260808-001-miniharness-opencode-replacement.md`
+
+## Current State Summary
+
+The repository operating scaffold is adopted from `LPFchan/repo-template`
+version 1.1.5. The canonical product specification is `records/SPEC.md`;
+current operational truth is this file; accepted future direction is
+`records/PLANS.md`. No implementation exists yet. The build/fork/adopt
+question that motivated the project is settled by prior research (heatmap
+RSH-20260808-001): build a CLI-only thin harness on Pi's agent libraries
+(`@earendil-works/pi-agent-core` + `pi-ai`), sessions on as JSONL, JSON in/out,
+concurrency capped in the low teens; adopt nothing, fork nothing.
+
+## Active Phases Or Tracks
+
+### Repository Bootstrap
+
+- Goal: adopt the repo-template scaffold and seed canonical records.
+- Status: `in progress`
+- Why this matters now: the research is settled; the project needs a canonical
+  home before implementation begins.
+- Current work: scaffold copied, records seeded, hooks to be wired, pushed to
+  `LPFchan/miniharness` (private).
+- Exit criteria: scaffold present, truth docs seeded, hooks enabled, remote set.
+- Dependencies: `LPFchan/repo-template` 1.1.5.
+- Risks: none.
+- Related ids: none yet.
+
+### CLI Summon Contract
+
+- Goal: a headless summon that takes argv/env and returns one JSON document
+  with a meaningful exit code, on `pi-agent-core`'s agent loop.
+- Status: `not started`
+- Why this matters now: it is the core capability heatmap's recap path needs.
+- Current work: none.
+- Exit criteria: a single summon emits the recap-shaped JSON object heatmap
+  expects, in place of `opencode run`.
+- Dependencies: `@earendil-works/pi-agent-core`, `@earendil-works/pi-ai`;
+  generated `models.json` from setup's registry.
+- Risks: Node memory tax at concurrency (low-teens cap).
+- Related ids: none yet.
+
+## Recent Changes To Project Reality
+
+- Date: 2026-08-08
+  - Change: Repository created from repo-template 1.1.5; records seeded.
+  - Why it matters: establishes the canonical home for the settled
+    opencode-replacement work.
+  - Related ids: heatmap RSH-20260808-001
+
+## Active Blockers And Risks
+
+- Blocker or risk: Node/V8 memory tax at 8–16 concurrent instances.
+  - Effect: caps usable concurrency in the low teens on the current host.
+  - Owner: operator/orchestrator.
+  - Mitigation: `--max-old-space-size` tuning + a real load test once the thin
+    harness exists; escape hatch is a Rust thin harness on `rig`.
+  - Related ids: heatmap RSH-20260808-001 (Q2)
+
+## Immediate Next Steps
+
+- Next: wire local commit hooks (`scripts/install-hooks.sh`).
+  - Owner: orchestrator.
+  - Trigger: bootstrap commit.
+  - Related ids: none.
+- Next: scaffold the CLI summon entrypoint on `pi-agent-core`.
+  - Owner: operator decision → worker agent.
+  - Trigger: operator confirms the first build slice.
+  - Related ids: none.
