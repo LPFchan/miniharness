@@ -19,6 +19,7 @@ repo operates. Origin research: heatmap
 
 ```sh
 npm install -g miniharness
+miniharness --help
 ```
 
 The CLI consumes a generated `models.json` (provider enrollment, tiers, and

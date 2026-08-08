@@ -74,6 +74,9 @@ week scope. The harness replaces `opencode run` in that path
 - CLI entrypoint (the summon contract, see below).
 - Generated `models.json` (consumed, not authored here).
 - JSONL session directory (recovery/audit surface for heatmap `adopt`).
+- Distribution: the `miniharness` package on npmjs (`npm install -g
+  miniharness`), published from this repo with a `files: [dist]` whitelist
+  and a `prepublishOnly` build+test gate.
 
 ## Summon Contract
 

@@ -8,7 +8,7 @@ Do not use it as a transcript or a scratchpad.
 
 - Last updated: 2026-08-08
 - Overall posture: `active`
-- Current focus: DEC-20260808-001 fully implemented and proven live on a routed provider; build slices complete.
+- Current focus: 0.1.0 released on npm (`npm install -g miniharness`); DEC-20260808-001 fully implemented and proven live on a routed provider.
 - Highest-priority blocker: none.
 - Next operator decision needed: heatmap cutover timing (mid-term track); setup-side registry→models.json generator (setup-repo task).
 - Related decisions: DEC-20260808-001 (CLI summon contract)
@@ -85,6 +85,15 @@ providers. Nothing forked, nothing adopted beyond the two pinned libraries.
 
 ## Recent Changes To Project Reality
 
+- Date: 2026-08-08
+  - Change: 0.1.0 published to npmjs as `miniharness` (public, maintainer
+    lpfchan). Packaging: `files: [dist]` whitelist (6-file, ~20 kB tarball),
+    `prepublishOnly` build+test gate, README install/prerequisite and
+    credentials sections corrected. Verified post-publish: clean-room
+    `npm install miniharness` resolves and the `miniharness` bin runs.
+  - Why it matters: the harness is now consumable fleet-wide without a git
+    checkout; heatmap cutover can depend on the npm artifact.
+  - Related ids: DEC-20260808-001, LOG-20260808-185917-odexk3, tag v0.1.0
 - Date: 2026-08-08
   - Change: Compaction wired into the summon path (mutual-agreement
     delegation, crofai/deepseek-v4-flash-0731 codex-leg subagent
