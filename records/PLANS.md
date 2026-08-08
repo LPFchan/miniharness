@@ -45,14 +45,31 @@ Do not put raw brainstorms or untriaged intake here.
 
 ### Near Term
 
-- Initiative: CLI summon contract on `pi-agent-core`.
-  - Why now: core capability; unblocks heatmap integration.
-  - Dependencies: npm deps; generated `models.json`.
-  - Related ids: none.
-- Initiative: JSONL session persistence at a harness-owned path.
-  - Why now: preserves heatmap's adoption/recovery join without a database.
-  - Dependencies: `SessionManager` / `agentDir` from the library.
-  - Related ids: heatmap RSH-20260808-001 (Q3).
+- Initiative: build slices against the fixed contract (DEC-20260808-001),
+  fanned out to parallel workers in two waves.
+  - Why now: the contract is fixed; the slices below are independent once
+    the package skeleton exists.
+  - Wave 1 (parallel):
+    - Slice A — package skeleton + pinned `@earendil-works/pi-agent-core` /
+      `pi-ai` + one headless summon smoke spike (owns `package.json`,
+      tsconfig, `src/`; pins the version everything else builds on).
+    - Slice B — contract conformance test harness asserting argv-in /
+      envelope-out / exit codes 0–3 from DEC-20260808-001 (owns `tests/`;
+      gates every later change).
+  - Wave 2 (parallel, after wave 1 merges):
+    - Slice C — JSONL session persistence at the harness-owned path
+      (`~/.local/share/miniharness/sessions/`, `--session-dir`,
+      `--no-session`) plus a read-only adoption-join probe against fixture
+      JSONL.
+    - Slice D — `models.json` consumer + `--provider`/`--model`/`--effort`
+      resolution against setup's registry and the generated
+      `thinkingLevelMap`, using a fixture projection until the setup-side
+      generator lands.
+    - Slice E — CLI wiring: argv/stdin parsing, `--system-prompt`,
+      `--cwd`, envelope emission, exit-code mapping.
+  - Dependencies: npm deps (registry reachable, current 0.84.1); generated
+    `models.json` (fixture acceptable until the setup generator lands).
+  - Related ids: DEC-20260808-001, heatmap RSH-20260808-001.
 
 ### Mid Term
 
