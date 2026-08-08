@@ -8,9 +8,9 @@ Do not use it as a transcript or a scratchpad.
 
 - Last updated: 2026-08-08
 - Overall posture: `active`
-- Current focus: wave 1 landed (skeleton + conformance suite); wave 2 ready to fan out.
+- Current focus: DEC-20260808-001 fully implemented and proven live on a routed provider; build slices complete.
 - Highest-priority blocker: none.
-- Next operator decision needed: none blocking — wave 2 (slices C/D/E) is unblocked.
+- Next operator decision needed: heatmap cutover timing (mid-term track); setup-side registry→models.json generator (setup-repo task).
 - Related decisions: DEC-20260808-001 (CLI summon contract)
 - Origin research: heatmap `records/research/RSH-20260808-001-miniharness-opencode-replacement.md`
 
@@ -60,16 +60,19 @@ concurrency capped in the low teens; adopt nothing, fork nothing.
 
 - Goal: a headless summon that takes argv/env and returns one JSON document
   with a meaningful exit code, on `pi-agent-core`'s agent loop.
-- Status: `skeleton landed; flag wiring (D/E) pending`
+- Status: `done — full DEC contract implemented and live-verified`
 - Why this matters now: it is the core capability heatmap's recap path needs.
-- Current work: wave 1 merged — `src/cli.ts` performs a headless summon on
-  `pi-agent-core`/`pi-ai` 0.84.1 and emits the DEC envelope (verified live:
-  exit 0 with tokens/cost/duration); the conformance suite
-  (`tests/contract.test.mjs`) gates remaining work with 3 red exit-2 tests
-  for the unimplemented flags.
-- Exit criteria: a single summon emits the DEC-20260808-001 envelope with
-  `--provider`/`--model`/`--effort` resolution and sessions on, in place of
-  `opencode run`.
+- Current work: waves 1–2 merged. `miniharness` implements the complete
+  DEC-20260808-001 surface: envelope with tokens/cost/duration/session_id,
+  exit codes 0/1/2/3, full flag set (provider/model/effort incl. registry
+  tiers, system-prompt via flag/file/stdin, cwd, session-dir, no-session,
+  config-dir, help), JSONL sessions on by default, adoption-join probe,
+  registry custom providers (crofai et al. as OpenAI-compatible endpoints
+  keyed from setup's auth store), and a fault-injection hook for the exit-1
+  path. Suite: 58 tests, 53 pass, 0 fail, 5 live skips, 0 todo. Live-verified
+  on crofai (deepseek-v4-flash-0731): exit 0 envelope + session JSONL +
+  stage-key probe recovery.
+- Exit criteria: met pending heatmap cutover.
 - Dependencies: `@earendil-works/pi-agent-core`, `@earendil-works/pi-ai`;
   generated `models.json` from setup's registry.
 - Risks: Node memory tax at concurrency (low-teens cap).
@@ -77,6 +80,18 @@ concurrency capped in the low teens; adopt nothing, fork nothing.
 
 ## Recent Changes To Project Reality
 
+- Date: 2026-08-08
+  - Change: Wave 2 fanned out (slices C/D/E) and merged with live-fire
+    integration fixes: custom-provider registration, fixture regeneration
+    (profile-enabled providers), adoption-probe recursion + pi JSONL v4
+    shape. Slice C's child hung post-completion and was killed; its complete
+    work was adopted from the worktree. systemd-tmpfiles-clean wiped the
+    wave-2 /tmp run-state mid-flight; worktrees and repo were unaffected.
+  - Why it matters: the summon contract is no longer theoretical — it ran
+    live against a routed provider and round-tripped the adoption join.
+  - Related ids: DEC-20260808-001, LOG-20260808-165116-odexk3,
+    LOG-20260808-165341-odexk3, LOG-20260808-172623-odexk3,
+    LOG-20260808-174749-odexk3
 - Date: 2026-08-08
   - Change: Wave 1 fanned out to two parallel subagents (opencodex,
     crofai/deepseek-v4-flash-0731 on the codex leg) and merged: CLI skeleton
@@ -110,14 +125,16 @@ concurrency capped in the low teens; adopt nothing, fork nothing.
 
 ## Immediate Next Steps
 
-- Next: fan out wave 2 — slice C (JSONL session persistence +
-  adoption-join probe), slice D (models.json consumer +
-  provider/model/effort resolution), slice E (CLI flag wiring).
-  - Owner: worker agents (parallel).
-  - Trigger: none — wave 1 merged.
-  - Related ids: DEC-20260808-001.
-- Next: provide a fault-injection hook so the exit-1 conformance test can
-  leave todo (flagged by slice B).
-  - Owner: wave-2 worker (slice E).
-  - Trigger: slice E implementation.
-  - Related ids: DEC-20260808-001.
+- Next: concurrency load test on the real host (mid-term track; gates the
+  low-teens cap and the Rust escape hatch decision).
+  - Owner: orchestrator.
+  - Trigger: operator schedules.
+  - Related ids: heatmap RSH-20260808-001 (Q2).
+- Next: heatmap integration — point the recap summon at miniharness.
+  - Owner: operator decision → heatmap worker.
+  - Trigger: operator schedules cutover.
+  - Related ids: heatmap `src/recap/mod.rs`, DEC-20260808-001.
+- Next: setup-side registry→models.json generator replaces the hand fixture.
+  - Owner: setup repo.
+  - Trigger: operator schedules in setup.
+  - Related ids: heatmap RSH-20260808-001 (Q1).
