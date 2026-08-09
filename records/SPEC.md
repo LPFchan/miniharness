@@ -9,8 +9,9 @@ Keep it durable. Do not use it as a changelog, inbox, or weekly narrative.
 - Canonical repo: `LPFchan/miniharness` (private)
 - Project id: `miniharness`
 - Operator: LPFchan
-- Last updated: 2026-08-08
-- Related decisions: see `records/decisions/`
+- Last updated: 2026-08-09
+- Related decisions: DEC-20260808-001, DEC-20260808-002,
+  DEC-20260809-001
 - Origin research: heatmap `records/research/RSH-20260808-001-miniharness-opencode-replacement.md`
 
 ## Project Thesis
@@ -34,6 +35,9 @@ week scope. The harness replaces `opencode run` in that path
 
 - Headless summon: argv/env in, one JSON envelope out, meaningful exit code
   (contract fixed by DEC-20260808-001).
+- Default summon lifecycle: versioned NDJSON state transitions and coalesced
+  progress on stderr, with `--silent` suppressing lifecycle output while
+  preserving failure diagnostics (DEC-20260809-001).
 - Provider/model/effort selection driven by a generated `models.json`,
   projected from the operator's canonical registry
   (`~/.config/providers/registry.json`, LPFchan/setup).
@@ -89,7 +93,8 @@ record is canonical. Summary:
 - **Output**: one JSON envelope on stdout — `output` (assistant text,
   passed through unvalidated) plus optional `session_id`, `model`,
   `provider`, `tokens` (heatmap's `TokenCounts` shape), `cost_microdollars`,
-  `duration_ms`. stderr is human-readable diagnostics only.
+  `duration_ms`. stderr carries versioned NDJSON lifecycle events by default;
+  `--silent` suppresses lifecycle/progress events but not failures.
 - **Exit codes**: 0 success / 1 summon failed in flight / 2 bad invocation /
   3 harness internal. stdout empty unless 0.
 - **Input**: prompt positional or via stdin; `--system-prompt` /

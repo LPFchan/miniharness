@@ -43,10 +43,34 @@ Do not put raw brainstorms or untriaged intake here.
 - Earliest likely start: 2026-08.
 - Related ids: heatmap RSH-20260808-001 (Q1).
 
+### Default summon lifecycle observability
+
+- Outcome: every summon emits a small versioned NDJSON lifecycle stream on
+  stderr by default; `--silent` restores empty success stderr without hiding
+  failures.
+- Why this is accepted: DEC-20260809-001. Heatmap needs per-worker phase and
+  last-activity state before its 600-second deadline, and Pi's existing agent
+  events provide most of the signal without expanding miniharness into a
+  second agent loop.
+- Expected value: heatmap can distinguish awaiting-response, streaming, tool,
+  and finalization phases across 8–16 workers and identify suspected stalls
+  before hard timeout.
+- Preconditions: none for the core event projection; truthful `retrying`
+  requires a future callback in Pi's provider-retry layer.
+- Earliest likely start: 2026-08.
+- Related ids: RSH-20260809-001, DEC-20260809-001.
+
 ## Sequencing
 
 ### Near Term
 
+- Initiative: implement DEC-20260809-001 default summon lifecycle events and
+  `--silent`.
+  - Why now: the contract is accepted and closes the black-box gap before the
+    heatmap cutover.
+  - Dependencies: pinned Pi `Agent.subscribe()` event surface; retry events are
+    explicitly outside the initial implementation.
+  - Related ids: RSH-20260809-001, DEC-20260809-001.
 - Initiative: first upstream intake review of the pinned Pi version (0.84.1).
   - Why now: the pin exists; the module is dormant until its first review,
     and starting the cadence now means the first weekly release diff is

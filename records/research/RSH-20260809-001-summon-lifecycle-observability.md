@@ -33,10 +33,11 @@ Two limits matter:
    cannot expose `retrying` without a new retry callback in `pi-ai` or a less
    desirable harness-owned retry implementation.
 
-The smallest useful first iteration is an **opt-in NDJSON event stream on
-stderr**. Keep the current default behavior unchanged, use state transitions
-rather than forwarding raw token content, and defer a sidecar socket until a
-real multi-process transport need appears.
+The smallest useful first iteration is a **default NDJSON lifecycle stream on
+stderr**, with `--silent` suppressing lifecycle and progress events for callers
+that require empty success stderr. Use state transitions rather than forwarding
+raw token content, and defer a sidecar socket until a real multi-process
+transport need appears.
 
 ## Existing Seams
 
@@ -122,11 +123,11 @@ identity.
 
 ## Transport Options
 
-### Opt-in stderr NDJSON (recommended first)
+### Default stderr NDJSON (recommended first)
 
-Add an explicit invocation mode such as `--events=stderr`. In that mode,
-lifecycle records are one JSON object per stderr line. The default invocation
-continues to produce no success stderr and exactly one stdout envelope.
+Lifecycle records are one JSON object per stderr line by default. `--silent`
+suppresses lifecycle and progress events but never suppresses failure
+diagnostics. Stdout continues to contain exactly one success envelope.
 
 Advantages:
 
@@ -138,15 +139,16 @@ Advantages:
 Costs and contract effect:
 
 - DEC-20260808-001 says stderr carries human-readable diagnostics only, and the
-  conformance suite asserts empty stderr on success. Event mode therefore needs
-  an explicit additive contract decision even though default behavior is
-  preserved.
-- In event mode, diagnostics must remain distinguishable. The cleanest rule is
-  that miniharness-authored stderr lines are structured protocol records,
+  conformance suite asserts empty stderr on success. Default lifecycle output
+  therefore requires an explicit contract revision.
+- Miniharness-authored stderr lines should be structured protocol records,
   including `failed`; callers should still tolerate unstructured runtime output
-  from failures below miniharness.
+  from failures below miniharness. Under `--silent`, failure records remain
+  visible.
 - Heatmap must drain stderr concurrently with stdout/process waiting so a busy
   pipe cannot block the child.
+- Coalesced `progress` records may be dropped under stderr backpressure. State
+  transitions are small and must not be dropped.
 
 ### Dedicated inherited file descriptor
 
@@ -213,29 +215,21 @@ the right boundary.
 
 ## Follow-up Route
 
-1. Create a `DEC-*` only if the operator accepts an additive lifecycle
-   contract. Fix the opt-in flag, schema/versioning, stderr diagnostic behavior,
-   redaction boundary, and event ordering there.
+1. Implement the lifecycle contract fixed by DEC-20260809-001.
 2. Prototype the Pi-event projection with an offline stub stream and test
    transition ordering, progress throttling, failure paths, pipe draining, and
-   that default invocations still have empty success stderr.
+   that `--silent` invocations have empty success stderr.
 3. Add heatmap consumption as a separate integration change: continuously
-   parse the child's event-mode stderr and maintain one state/timestamp record
+   parse the child's lifecycle stderr and maintain one state/timestamp record
    per summon.
 4. Pursue retry callbacks upstream in `pi-ai`; do not label workers `retrying`
    until there is a truthful signal.
 5. Revisit an event fd or sidecar socket only if stderr mixing or a non-parent
    observer becomes a demonstrated requirement.
 
-## Open Questions For A Contract Decision
+## Remaining Open Questions
 
-- Should event mode be `--events=stderr`, an environment variable reserved for
-  heatmap, or both?
-- Does `done` precede or follow the stdout envelope write? "Envelope ready"
-  avoids claiming bytes have been consumed, but the ordering must be fixed.
-- Should a slow-consumer policy ever drop coalesced `progress` events, while
-  guaranteeing state transitions?
-- Is a caller-provided summon/correlation id needed at cutover, or is the child
-  process association sufficient?
 - Will the Pi maintainers accept retry callbacks in the shared provider-retry
   helper and propagate them across every provider transport heatmap uses?
+- Will a non-parent observer eventually require a caller-provided correlation
+  id or sidecar transport?
