@@ -73,6 +73,16 @@ function parseEnvelope(stdout) {
 const ENVELOPE_KEYS = ['session_id', 'model', 'provider', 'tokens', 'cost_microdollars', 'duration_ms'];
 const TOKEN_KEYS = ['input', 'output', 'cache_read', 'cache_write', 'reasoning'];
 
+/** Parse miniharness-authored lifecycle stderr. */
+function parseLifecycle(stderr) {
+  return stderr.trim().split('\n').filter(Boolean).map((line) => {
+    const record = JSON.parse(line);
+    assert.equal(record.protocol, 'miniharness.lifecycle');
+    assert.equal(record.version, 1);
+    return record;
+  });
+}
+
 /** Assert the DEC success envelope shape; returns the parsed envelope. */
 function assertEnvelope(stdout, stderr) {
   const env = parseEnvelope(stdout);
@@ -87,7 +97,9 @@ function assertEnvelope(stdout, stderr) {
       assert.ok(key in env.tokens, `tokens must carry "${key}" (TokenCounts shape)`);
     }
   }
-  assert.equal(stderr, '', 'stderr must be empty on success - diagnostics only');
+  const lifecycle = parseLifecycle(stderr);
+  assert.equal(lifecycle[0]?.event, 'started');
+  assert.equal(lifecycle.at(-1)?.event, 'done');
   return env;
 }
 
@@ -103,9 +115,11 @@ function assertBadInvocation(args) {
 // Exit 2 - bad invocation (ungated; red until slice A/E lands)
 // ---------------------------------------------------------------------------
 
-test('exit 2 on unknown flag with empty stdout and a stderr diagnostic [DEC Exit Codes: 2 - unparseable flags; DEC Output: stdout machine-clean]', () => {
+test('exit 2 on unknown flag with empty stdout and a structured failed record [DEC Exit Codes: 2 - unparseable flags; DEC Output: stdout machine-clean]', () => {
   const { stderr } = assertBadInvocation(['--definitely-not-a-miniharness-flag']);
-  assert.ok(stderr.length > 0, 'stderr must carry a human-readable error for a bad invocation');
+  const lifecycle = parseLifecycle(stderr);
+  assert.equal(lifecycle.at(-1)?.event, 'failed');
+  assert.equal(lifecycle.at(-1)?.exit_code, 2);
 });
 
 test('exit 2 on unresolvable --provider with empty stdout [DEC Exit Codes: 2 - unresolvable provider; DEC Input: model selection]', () => {
@@ -125,10 +139,17 @@ test('exit 2 on missing config dir with empty stdout [DEC Exit Codes: 2 - missin
 // Success and input paths - live-gated (needs a real provider + binary)
 // ---------------------------------------------------------------------------
 
-test('success: trivial prompt exits 0 with exactly one JSON envelope and empty stderr [DEC Output: success envelope; DEC Exit Codes: 0]', { skip: LIVE_SKIP }, () => {
+test('success: trivial prompt exits 0 with one JSON envelope and lifecycle stderr [DEC Output: success envelope; DEC Exit Codes: 0]', { skip: LIVE_SKIP }, () => {
   const { status, stdout, stderr } = runHarness(['Reply with the single word ok.']);
   assert.equal(status, 0, `summon must exit 0 (got ${status}); stderr: ${stderr}`);
   assertEnvelope(stdout, stderr);
+});
+
+test('success: --silent preserves the envelope and empty success stderr [DEC-20260809-001]', { skip: LIVE_SKIP }, () => {
+  const { status, stdout, stderr } = runHarness(['--silent', 'Reply with the single word ok.']);
+  assert.equal(status, 0, `silent summon must exit 0 (got ${status}); stderr: ${stderr}`);
+  parseEnvelope(stdout);
+  assert.equal(stderr, '');
 });
 
 test('input: positional prompt and stdin prompt produce equivalent envelopes [DEC Input: prompt]', { skip: LIVE_SKIP }, () => {

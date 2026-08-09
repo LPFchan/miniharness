@@ -122,6 +122,28 @@ async function main() {
     process.exit(1);
   }
 
+  if (args.includes("--silent")) {
+    if (stderr !== "") {
+      console.error("FAIL: --silent success emitted stderr");
+      console.error(stderr.trim());
+      process.exit(1);
+    }
+  } else {
+    let lifecycle;
+    try {
+      lifecycle = stderr.trim().split("\n").filter(Boolean).map((line) => JSON.parse(line));
+    } catch (error) {
+      console.error(`FAIL: stderr is not lifecycle NDJSON: ${error.message}`);
+      console.error(stderr.trim());
+      process.exit(1);
+    }
+    if (lifecycle[0]?.event !== "started" || lifecycle.at(-1)?.event !== "done") {
+      console.error("FAIL: lifecycle stderr does not run from started to done");
+      console.error(stderr.trim());
+      process.exit(1);
+    }
+  }
+
   console.log(`PASS: summon completed (${envelope.model ?? "unknown model"}).`);
 }
 

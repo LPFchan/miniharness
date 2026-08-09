@@ -49,18 +49,38 @@ export function registerTestProvider(models) {
         'openai-completions': {
           streamSimple: () => {
             const stream = createAssistantMessageEventStream();
+            const base = {
+              role: 'assistant',
+              api: 'openai-completions',
+              provider: 'stub',
+              model: STUB_MODEL,
+              usage: usage(),
+              stopReason: 'pending',
+              timestamp: Date.now(),
+            };
             stream.push({
               type: 'start',
               partial: {
-                role: 'assistant',
+                ...base,
                 content: [],
-                api: 'openai-completions',
-                provider: 'stub',
-                model: STUB_MODEL,
-                usage: usage(),
-                stopReason: 'pending',
-                timestamp: Date.now(),
               },
+            });
+            stream.push({
+              type: 'text_start',
+              contentIndex: 0,
+              partial: { ...base, content: [{ type: 'text', text: '' }] },
+            });
+            stream.push({
+              type: 'text_delta',
+              contentIndex: 0,
+              delta: 'stub reply',
+              partial: { ...base, content: [{ type: 'text', text: 'stub reply' }] },
+            });
+            stream.push({
+              type: 'text_end',
+              contentIndex: 0,
+              content: 'stub reply',
+              partial: { ...base, content: [{ type: 'text', text: 'stub reply' }] },
             });
             stream.end({
               role: 'assistant',
@@ -68,7 +88,7 @@ export function registerTestProvider(models) {
               api: 'openai-completions',
               provider: 'stub',
               model: STUB_MODEL,
-            usage: usage({ input: 1024, output: 8 }),
+              usage: usage({ input: 1024, output: 8 }),
               stopReason: 'stop',
               timestamp: Date.now(),
             });

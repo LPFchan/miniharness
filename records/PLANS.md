@@ -48,6 +48,8 @@ Do not put raw brainstorms or untriaged intake here.
 - Outcome: every summon emits a small versioned NDJSON lifecycle stream on
   stderr by default; `--silent` restores empty success stderr without hiding
   failures.
+- Status: implemented; see SPEC/STATUS. Remaining work is heatmap consumption
+  and optional upstream retry callbacks.
 - Why this is accepted: DEC-20260809-001. Heatmap needs per-worker phase and
   last-activity state before its 600-second deadline, and Pi's existing agent
   events provide most of the signal without expanding miniharness into a
@@ -64,13 +66,6 @@ Do not put raw brainstorms or untriaged intake here.
 
 ### Near Term
 
-- Initiative: implement DEC-20260809-001 default summon lifecycle events and
-  `--silent`.
-  - Why now: the contract is accepted and closes the black-box gap before the
-    heatmap cutover.
-  - Dependencies: pinned Pi `Agent.subscribe()` event surface; retry events are
-    explicitly outside the initial implementation.
-  - Related ids: RSH-20260809-001, DEC-20260809-001.
 - Initiative: first upstream intake review of the pinned Pi version (0.84.1).
   - Why now: the pin exists; the module is dormant until its first review,
     and starting the cadence now means the first weekly release diff is

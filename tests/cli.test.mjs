@@ -44,6 +44,15 @@ function runHarness(args, { input, cwd = REPO_ROOT, env } = {}) {
   return { status: res.status, stdout: res.stdout ?? '', stderr: res.stderr ?? '' };
 }
 
+/** Return the message from the terminating structured failed record. */
+function failureMessage(stderr) {
+  const records = stderr.trim().split('\n').filter(Boolean).map((line) => JSON.parse(line));
+  const failed = records.at(-1);
+  assert.equal(failed?.event, 'failed', `last stderr record must be failed: ${stderr}`);
+  assert.equal(typeof failed.message, 'string');
+  return failed.message;
+}
+
 /** Assert a bad invocation: exit 2, stdout machine-clean and empty. */
 function assertBadInvocation(args, { input, env } = {}) {
   const { status, stdout, stderr } = runHarness(args, { input, env });
@@ -68,7 +77,7 @@ function fixtureConfigDir() {
 
 test('unknown long flag exits 2 with a one-line stderr diagnostic and empty stdout', () => {
   const { stderr } = assertBadInvocation(['--definitely-not-a-miniharness-flag']);
-  assert.match(stderr, /unknown flag: --definitely-not-a-miniharness-flag/);
+  assert.match(failureMessage(stderr), /unknown flag: --definitely-not-a-miniharness-flag/);
 });
 
 test('unknown short flag exits 2', () => {
@@ -105,12 +114,12 @@ test('--compaction valid values parse', () => {
 
 test('--compaction invalid value exits 2 naming the allowed set', () => {
   const { stderr } = assertBadInvocation(['--compaction', 'sometimes', 'hi']);
-  assert.match(stderr, /--compaction must be "off" or "auto"/);
+  assert.match(failureMessage(stderr), /--compaction must be "off" or "auto"/);
 });
 
 test('--compaction=value syntax works', () => {
   const { stderr } = assertBadInvocation(['--compaction=bogus', 'hi']);
-  assert.match(stderr, /--compaction must be "off" or "auto"/);
+  assert.match(failureMessage(stderr), /--compaction must be "off" or "auto"/);
 });
 
 test('more than one positional prompt exits 2', () => {
@@ -153,14 +162,14 @@ test('--system-prompt-file pointing at a missing file exits 2', () => {
 
 test('--cwd nonexistent exits 2', () => {
   const { stderr } = assertBadInvocation(['--cwd', '/nonexistent/miniharness-dir', 'hi']);
-  assert.match(stderr, /--cwd does not exist/);
+  assert.match(failureMessage(stderr), /--cwd does not exist/);
 });
 
 test('--cwd pointing at a file (not a directory) exits 2', () => {
   const file = join(mkdtempSync(join(tmpdir(), 'miniharness-cwd-')), 'not-a-dir');
   writeFileSync(file, 'x');
   const { stderr } = assertBadInvocation(['--cwd', file, 'hi']);
-  assert.match(stderr, /--cwd is not a directory/);
+  assert.match(failureMessage(stderr), /--cwd is not a directory/);
 });
 
 // ---------------------------------------------------------------------------
@@ -170,32 +179,33 @@ test('--cwd pointing at a file (not a directory) exits 2', () => {
 test('unknown provider exits 2 naming the enrolled set', () => {
   const dir = fixtureConfigDir();
   const { stderr } = assertBadInvocation(['--config-dir', dir, '--provider', 'nope', 'hi']);
-  assert.match(stderr, /provider "nope" is not enrolled/);
-  assert.match(stderr, /crofai/);
+  const message = failureMessage(stderr);
+  assert.match(message, /provider "nope" is not enrolled/);
+  assert.match(message, /crofai/);
 });
 
 test('unknown model exits 2', () => {
   const dir = fixtureConfigDir();
   const { stderr } = assertBadInvocation(['--config-dir', dir, '--model', 'nope', 'hi']);
-  assert.match(stderr, /unknown model "nope"/);
+  assert.match(failureMessage(stderr), /unknown model "nope"/);
 });
 
 test('tier on a tierless provider exits 2', () => {
   const dir = fixtureConfigDir();
   const { stderr } = assertBadInvocation(['--config-dir', dir, '--provider', 'crofai', '--model', 'sonnet', 'hi']);
-  assert.match(stderr, /no tier map/);
+  assert.match(failureMessage(stderr), /no tier map/);
 });
 
 test('unsupported effort exits 2 naming the supported set', () => {
   const dir = fixtureConfigDir();
   const { stderr } = assertBadInvocation(['--config-dir', dir, '--provider', 'kimicode', '--model', 'k3', '--effort', 'bogus', 'hi']);
-  assert.match(stderr, /effort "bogus" is not a thinking level/);
+  assert.match(failureMessage(stderr), /effort "bogus" is not a thinking level/);
 });
 
 test('missing config dir exits 2', () => {
   const dir = mkdtempSync(join(tmpdir(), 'miniharness-config-empty-'));
   const { stderr } = assertBadInvocation(['--config-dir', dir, 'hi']);
-  assert.match(stderr, /config: cannot read/);
+  assert.match(failureMessage(stderr), /config: cannot read/);
 });
 
 test('provider/model/effort resolve against a fixture config dir and reach the fault-injection hook', () => {
@@ -209,7 +219,7 @@ test('provider/model/effort resolve against a fixture config dir and reach the f
   );
   assert.equal(status, 1, `expected injected in-flight failure (got ${status}); stderr: ${stderr}`);
   assert.equal(stdout, '', 'stdout must be empty on failure');
-  assert.match(stderr, /MINIHARNESS_FAIL_AFTER/);
+  assert.match(failureMessage(stderr), /MINIHARNESS_FAIL_AFTER/);
 });
 
 // ---------------------------------------------------------------------------
@@ -232,5 +242,5 @@ test('MINIHARNESS_FAIL_AFTER=provider-connect exits 1 with marked stderr and emp
   );
   assert.equal(status, 1, `injected failure must exit 1 (got ${status}); stderr: ${stderr}`);
   assert.equal(stdout, '', 'stdout must be empty on failure');
-  assert.match(stderr, /MINIHARNESS_FAIL_AFTER=provider-connect injected failure/);
+  assert.match(failureMessage(stderr), /MINIHARNESS_FAIL_AFTER=provider-connect injected failure/);
 });

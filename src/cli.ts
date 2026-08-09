@@ -1,18 +1,6 @@
 #!/usr/bin/env node
 // miniharness headless summon: argv/stdin prompt in, one DEC-20260808-001
-// envelope out. Slice E scope: the complete argv/stdin interface of
-// DEC-20260808-001 — flag parsing, system prompt, cwd, provider/model/effort
-// validation, sessions, help, and the MINIHARNESS_FAIL_AFTER fault-injection
-// hook.
-//
-// Seams for slice C/D integration:
-//  - resolveModel(flags)  — minimal direct validation against
-//    <configDir>/models.json (provider, model, effort). Slice D's
-//    src/config.ts resolveConfig() replaces the internals at integration;
-//    the call shape (flags in, ResolvedModel out) is already theirs.
-//  - openSession(flags)   — parses --session-dir/--no-session and returns the
-//    session config. Without slice C there is no JSONL writer, so the session
-//    id stays null and nothing is written; slice C replaces the internals.
+// envelope on stdout, and DEC-20260809-001 lifecycle NDJSON on stderr.
 // Exit codes: 0 completed / 1 failed in flight / 2 bad invocation / 3 internal.
 import {
   Agent,
@@ -21,6 +9,7 @@ import {
   estimateContextTokens,
   prepareCompaction,
   shouldCompact,
+  type AgentEvent,
   type AgentMessage,
   type CompactionEntry,
   type Entry,
@@ -115,8 +104,75 @@ interface Flags {
   sessionDir?: string;
   noSession: boolean;
   configDir?: string;
+  /** Suppress non-failure lifecycle records (DEC-20260809-001). */
+  silent: boolean;
   help: boolean;
 }
+
+type LifecycleEventName =
+  | "started"
+  | "request_started"
+  | "response_started"
+  | "streaming_started"
+  | "progress"
+  | "tool_call"
+  | "tool_started"
+  | "tool_finished"
+  | "finalizing"
+  | "done"
+  | "failed";
+
+type LifecycleFields = Record<string, string | number | boolean | null>;
+
+/**
+ * DEC-20260809-001 lifecycle projection. Records contain timing, counters,
+ * and safe identifiers only; prompt/model output/tool payloads never enter
+ * stderr. State transitions are synchronous and ordered by `seq`.
+ */
+class LifecycleEmitter {
+  private readonly startedMonotonic = process.hrtime.bigint();
+  private sequence = 0;
+  private silent = false;
+  private stderrAvailable = true;
+
+  setSilent(silent: boolean): void {
+    this.silent = silent;
+  }
+
+  elapsedMs(): number {
+    return Number((process.hrtime.bigint() - this.startedMonotonic) / 1_000_000n);
+  }
+
+  emit(event: LifecycleEventName, fields: LifecycleFields = {}, force = false): void {
+    if ((!force && this.silent) || !this.stderrAvailable) return;
+    const record = {
+      protocol: "miniharness.lifecycle",
+      version: 1,
+      seq: ++this.sequence,
+      event,
+      timestamp: new Date().toISOString(),
+      elapsed_ms: this.elapsedMs(),
+      ...fields,
+    };
+    try {
+      writeSync(2, JSON.stringify(record) + "\n");
+    } catch {
+      // A closed observer must not turn a completed model call into a harness
+      // failure. Once stderr is unavailable, later records are best-effort.
+      this.stderrAvailable = false;
+    }
+  }
+
+  fail(exitCode: 1 | 2 | 3, failureClass: "summon" | "usage" | "internal", message: string): void {
+    this.emit(
+      "failed",
+      { exit_code: exitCode, failure_class: failureClass, message },
+      true,
+    );
+  }
+}
+
+const lifecycle = new LifecycleEmitter();
 
 /** Control flow: unwinds the async stack; process.exitCode carries the DEC exit code. */
 class ExitSignal extends Error {
@@ -127,28 +183,19 @@ class ExitSignal extends Error {
   }
 }
 
-/**
- * Write a diagnostic to stderr synchronously. `process.stderr.write` is
- * async and can be dropped when the process exits right after an async
- * stdin read unwinds; writeSync guarantees the message lands before exit.
- */
-function diagnostic(message: string): void {
-  writeSync(2, `miniharness: ${message}\n`);
-}
-
 /** Write to stdout synchronously so the bytes land before process exit. */
 function emit(stdout: string): void {
   writeSync(1, stdout);
 }
 
 function usageError(message: string): never {
-  diagnostic(message);
+  lifecycle.fail(2, "usage", message);
   process.exitCode = 2;
   throw new ExitSignal(2);
 }
 
 function internalError(message: string): never {
-  diagnostic(`internal failure: ${message}`);
+  lifecycle.fail(3, "internal", `internal failure: ${message}`);
   process.exitCode = 3;
   throw new ExitSignal(3);
 }
@@ -278,9 +325,143 @@ async function writeSession(
 }
 
 function fail(message: string): never {
-  diagnostic(message);
+  lifecycle.fail(1, "summon", message);
   process.exitCode = 1;
   throw new ExitSignal(1);
+}
+
+/**
+ * Project Pi's detailed AgentEvent stream into DEC-20260809-001's stable,
+ * content-free lifecycle vocabulary.
+ */
+function subscribeLifecycle(
+  agent: Agent,
+  resolved: ResolvedModel,
+): () => void {
+  let turn = 0;
+  let responseStarted = false;
+  let streamingStarted = false;
+  let finalizing = false;
+  let deltaCount = 0;
+  let textBytes = 0;
+  let reasoningBytes = 0;
+  let toolBytes = 0;
+  let toolUpdates = 0;
+  let lastProgressElapsed = Number.NEGATIVE_INFINITY;
+  let lastReportedDeltaCount = 0;
+
+  const emitProgress = (phase: "streaming" | "tool", force = false): void => {
+    const elapsed = lifecycle.elapsedMs();
+    if (!force && elapsed - lastProgressElapsed < 1_000) return;
+    lifecycle.emit("progress", {
+      turn,
+      phase,
+      delta_count: deltaCount,
+      text_bytes: textBytes,
+      reasoning_bytes: reasoningBytes,
+      tool_bytes: toolBytes,
+      tool_updates: toolUpdates,
+    });
+    lastProgressElapsed = elapsed;
+    lastReportedDeltaCount = deltaCount;
+  };
+
+  return agent.subscribe((event: AgentEvent) => {
+    switch (event.type) {
+      case "agent_start":
+        return;
+      case "turn_start":
+        turn++;
+        responseStarted = false;
+        streamingStarted = false;
+        lifecycle.emit("request_started", {
+          turn,
+          provider: resolved.providerName,
+          model: resolved.modelId,
+        });
+        return;
+      case "message_start":
+        if (event.message.role === "assistant" && !responseStarted) {
+          responseStarted = true;
+          lifecycle.emit("response_started", { turn });
+        }
+        return;
+      case "message_update": {
+        const update = event.assistantMessageEvent;
+        if (!responseStarted) {
+          responseStarted = true;
+          lifecycle.emit("response_started", { turn });
+        }
+        if (update.type === "text_delta" || update.type === "thinking_delta") {
+          if (update.delta.length === 0) return;
+          if (!streamingStarted) {
+            streamingStarted = true;
+            lifecycle.emit("streaming_started", {
+              turn,
+              stream_kind: update.type === "text_delta" ? "text" : "reasoning",
+            });
+          }
+          deltaCount++;
+          if (update.type === "text_delta") {
+            textBytes += Buffer.byteLength(update.delta);
+          } else {
+            reasoningBytes += Buffer.byteLength(update.delta);
+          }
+          emitProgress("streaming");
+          return;
+        }
+        if (update.type === "toolcall_delta") {
+          deltaCount++;
+          toolBytes += Buffer.byteLength(update.delta);
+          emitProgress("streaming");
+          return;
+        }
+        if (update.type === "toolcall_end") {
+          lifecycle.emit("tool_call", {
+            turn,
+            tool_call_id: update.toolCall.id,
+            tool_name: update.toolCall.name,
+          });
+        }
+        return;
+      }
+      case "message_end":
+        if (
+          event.message.role === "assistant" &&
+          deltaCount !== lastReportedDeltaCount
+        ) {
+          emitProgress("streaming", true);
+        }
+        return;
+      case "tool_execution_start":
+        lifecycle.emit("tool_started", {
+          turn,
+          tool_call_id: event.toolCallId,
+          tool_name: event.toolName,
+        });
+        return;
+      case "tool_execution_update":
+        toolUpdates++;
+        emitProgress("tool");
+        return;
+      case "tool_execution_end":
+        lifecycle.emit("tool_finished", {
+          turn,
+          tool_call_id: event.toolCallId,
+          tool_name: event.toolName,
+          is_error: event.isError,
+        });
+        return;
+      case "turn_end":
+        return;
+      case "agent_end":
+        if (!finalizing) {
+          finalizing = true;
+          lifecycle.emit("finalizing", { turns: turn });
+        }
+        return;
+    }
+  });
 }
 
 /**
@@ -371,7 +552,7 @@ async function maybeCompact(
  * value, duplicated scalar flag, or more than one positional -> exit 2.
  */
 function parseArgv(argv: string[]): { flags: Flags; positionals: string[] } {
-  const flags: Flags = { noSession: false, help: false, compaction: "auto" };
+  const flags: Flags = { noSession: false, silent: false, help: false, compaction: "auto" };
   const positionals: string[] = [];
   const seen = new Set<string>();
   const valueFlags = new Map<string, (value: string) => void>([
@@ -404,6 +585,10 @@ function parseArgv(argv: string[]): { flags: Flags; positionals: string[] } {
     }
     if (arg === "--no-session") {
       flags.noSession = true;
+      continue;
+    }
+    if (arg === "--silent") {
+      flags.silent = true;
       continue;
     }
     if (arg.startsWith("--")) {
@@ -476,6 +661,7 @@ Options:
   --cwd <path>               Working directory (must exist; default: process cwd)
   --session-dir <path>       Session JSONL directory (default: ~/.local/share/miniharness/sessions)
   --no-session               Do not persist a session
+  --silent                   Suppress lifecycle/progress events (failures remain)
   --config-dir <path>        Config directory holding models.json
   --help                     Show this help and exit
 
@@ -503,10 +689,12 @@ async function resolveSystemPrompt(flags: Flags): Promise<string> {
 async function main(): Promise<void> {
   const startedAt = Date.now();
   const { flags, positionals } = parseArgv(process.argv.slice(2));
+  lifecycle.setSilent(flags.silent);
   if (flags.help) {
     emit(USAGE);
     return;
   }
+  lifecycle.emit("started");
 
   // Prompt: positional, or stdin when piped. System prompt may also read
   // stdin via --system-prompt-file -; the two reads are mutually exclusive.
@@ -534,12 +722,14 @@ async function main(): Promise<void> {
 
   // --cwd must exist and be a directory; affects the summon working context.
   if (flags.cwd !== undefined) {
+    let cwdStat;
     try {
-      if (!statSync(flags.cwd).isDirectory()) {
-        usageError(`--cwd is not a directory: ${flags.cwd}`);
-      }
+      cwdStat = statSync(flags.cwd);
     } catch {
       usageError(`--cwd does not exist: ${flags.cwd}`);
+    }
+    if (!cwdStat.isDirectory()) {
+      usageError(`--cwd is not a directory: ${flags.cwd}`);
     }
   }
 
@@ -595,6 +785,7 @@ async function main(): Promise<void> {
     },
     streamFn: (m, ctx, opts) => models.streamSimple(m, ctx, opts),
   });
+  const unsubscribeLifecycle = subscribeLifecycle(agent, resolved);
 
   try {
     await agent.prompt(prompt);
@@ -605,6 +796,7 @@ async function main(): Promise<void> {
   } finally {
     // Tear down any in-flight provider connection before exiting.
     agent.abort();
+    unsubscribeLifecycle();
   }
 
   const messages = agent.state.messages;
@@ -627,11 +819,12 @@ async function main(): Promise<void> {
   // hide a successful reply. The outcome is folded into the session only - the
   // DEC-20260808-001 envelope keeps its fixed shape.
   let compactionEntry: CompactionEntry | undefined;
+  let finalizationWarning: string | undefined;
   const compactionOutcome = await maybeCompact(messages, resolved.model, models, flags.compaction);
   if (compactionOutcome.kind === "compacted") {
     compactionEntry = compactionOutcome.entry;
   } else if (compactionOutcome.kind === "failed") {
-    diagnostic(`compaction skipped: ${compactionOutcome.error}`);
+    finalizationWarning = `compaction skipped: ${compactionOutcome.error}`;
   }
 
   let sessionId: string | null = null;
@@ -665,6 +858,10 @@ async function main(): Promise<void> {
   };
 
   emit(JSON.stringify(envelope) + "\n");
+  lifecycle.emit("done", {
+    duration_ms: Date.now() - startedAt,
+    ...(finalizationWarning === undefined ? {} : { warning: finalizationWarning }),
+  });
 }
 
 main().catch((error) => {

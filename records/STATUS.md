@@ -6,12 +6,14 @@ Do not use it as a transcript or a scratchpad.
 
 ## Snapshot
 
-- Last updated: 2026-08-08
+- Last updated: 2026-08-09
 - Overall posture: `active`
-- Current focus: 0.1.0 released on npm (`npm install -g miniharness`); DEC-20260808-001 fully implemented and proven live on a routed provider.
+- Current focus: DEC-20260809-001 default lifecycle observability implemented
+  and offline-proven; heatmap consumption remains part of cutover.
 - Highest-priority blocker: none.
 - Next operator decision needed: heatmap cutover timing (mid-term track); setup-side registry→models.json generator (setup-repo task).
-- Related decisions: DEC-20260808-001 (CLI summon contract), DEC-20260808-002 (CLI OAuth credential reuse)
+- Related decisions: DEC-20260808-001 (CLI summon contract), DEC-20260808-002
+  (CLI OAuth credential reuse), DEC-20260809-001 (default lifecycle events)
 - Origin research: heatmap `records/research/RSH-20260808-001-miniharness-opencode-replacement.md`
 
 ## Current State Summary
@@ -24,7 +26,9 @@ is live-verified: a CLI-only thin harness on Pi's agent libraries
 (`@earendil-works/pi-agent-core` + `pi-ai` 0.84.1), sessions on as JSONL,
 one JSON envelope out, meaningful exit codes, registry-driven
 provider/model/effort resolution including custom OpenAI-compatible
-providers. Nothing forked, nothing adopted beyond the two pinned libraries.
+providers. Summons now project Pi agent events into versioned, content-free
+lifecycle NDJSON on stderr by default; `--silent` suppresses non-failure
+records. Nothing forked, nothing adopted beyond the two pinned libraries.
 
 ## Active Phases Or Tracks
 
@@ -83,7 +87,37 @@ providers. Nothing forked, nothing adopted beyond the two pinned libraries.
 - Risks: Node memory tax at concurrency (low-teens cap).
 - Related ids: none yet.
 
+### Summon Lifecycle Observability
+
+- Goal: expose per-summon phase and recent activity before the caller's hard
+  timeout without changing the final stdout envelope.
+- Status: `done — DEC-20260809-001 implemented and offline-proven`
+- Why this matters now: heatmap can track 8–16 concurrent workers as awaiting
+  response, streaming, using tools, or finalizing instead of treating each as
+  a black box until timeout.
+- Current work: default stderr emits versioned NDJSON for started,
+  request/response/streaming, coalesced content-free progress, tool,
+  finalizing, done, and failed states. `--silent` restores empty success stderr
+  while failures remain structured. Offline stub coverage proves ordering,
+  schema, redaction, silent success, and silent failure visibility.
+- Exit criteria: met for miniharness; heatmap parsing is integration work.
+- Dependencies: Pi `Agent.subscribe()` in 0.84.1.
+- Risks: provider retry/backoff remains invisible until `pi-ai` exposes a
+  callback; heatmap must show `awaiting_response`, not infer `retrying`.
+- Related ids: RSH-20260809-001, DEC-20260809-001.
+
 ## Recent Changes To Project Reality
+
+- Date: 2026-08-09
+  - Change: DEC-20260809-001 implemented. Miniharness now emits default
+    versioned lifecycle NDJSON on stderr, projects Pi stream/tool events into a
+    stable redacted vocabulary, coalesces progress counters, keeps failures
+    visible under `--silent`, and writes `done` after the stdout envelope.
+    Suite: 79 tests, 73 pass, 0 fail, 6 live skips.
+  - Why it matters: heatmap can observe concurrent summon phase and activity
+    before its 600-second deadline without parsing model content or changing
+    the result envelope.
+  - Related ids: RSH-20260809-001, DEC-20260809-001.
 
 - Date: 2026-08-08
   - Change: DEC-20260808-002 implemented — miniharness reuses the operator's

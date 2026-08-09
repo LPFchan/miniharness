@@ -12,8 +12,9 @@ See `records/SPEC.md` for the canonical spec and `records/REPO.md` for how this
 repo operates. Origin research: heatmap
 `records/research/RSH-20260808-001-miniharness-opencode-replacement.md`.
 
-**Status:** DEC-20260808-001 summon contract implemented and live-verified
-(`npm install && npm run build && npm test`); see `records/STATUS.md`.
+**Status:** summon envelope, OAuth reuse, and default lifecycle contracts are
+implemented (`npm install && npm run build && npm test`); see
+`records/STATUS.md`.
 
 ## Install & prerequisite
 
@@ -55,7 +56,8 @@ transcript would overflow the model's context window, the library's compaction
 summarizes the history and records the compaction entry in the session
 JSONL; the envelope is unchanged), `--config-dir <path>` (override for the
 directory holding `models.json`; default is `PI_CODING_AGENT_DIR` or
-`~/.pi/agent/`), and `--help`.
+`~/.pi/agent/`), `--silent` (suppress lifecycle/progress events; failures
+remain), and `--help`.
 
 ```sh
 node dist/cli.js "say hi"
@@ -64,8 +66,16 @@ printf 'say hi' | node dist/cli.js
 
 On success it prints one JSON envelope to stdout (see
 `records/decisions/DEC-20260808-001-cli-summon-contract.md` for the contract);
-stderr carries human-readable errors only. Provider credentials: providers Pi
-ships as builtins use the ambient environment (e.g. `ANTHROPIC_API_KEY`);
+stderr emits versioned lifecycle NDJSON by default (DEC-20260809-001):
+`started`, request/response/streaming transitions, content-free coalesced
+`progress`, tool transitions, `finalizing`, then `done`. Every record carries
+`protocol`, `version`, `seq`, `timestamp`, and `elapsed_ms`. `--silent`
+restores empty stderr on success; structured `failed` records remain visible.
+Callers should drain stderr concurrently and must not expect prompt, response,
+reasoning, tool payload, credential, or provider-header content there.
+
+Provider credentials: providers Pi ships as builtins use the ambient
+environment (e.g. `ANTHROPIC_API_KEY`);
 registry providers Pi does not ship (crofai, grimoire, kimicode, …) are
 registered as OpenAI-compatible endpoints whose keys resolve from the
 operator's auth store (`~/.local/share/opencode/auth.json`, the same seam
@@ -83,6 +93,6 @@ smoke script skips.
 
 `MINIHARNESS_FAIL_AFTER=provider-connect` makes a summon fail mid-flight —
 after invocation validation, before the provider is contacted — with a marked
-stderr diagnostic and exit code 1. This exercises the DEC's exit-1 path without
-credentials or a network. It is a test-only hook, not part of the invocation
-contract; the conformance suite and `tests/cli.test.mjs` rely on it.
+structured `failed` record and exit code 1. This exercises the DEC's exit-1
+path without credentials or a network. It is a test-only hook, not part of the
+invocation contract; the conformance suite and `tests/cli.test.mjs` rely on it.

@@ -32,9 +32,14 @@ function harnessCommand() {
 }
 
 /** Spawn the harness under test; returns { status, stdout, stderr }. */
-function runHarness(args, { input, cwd = REPO_ROOT } = {}) {
+function runHarness(args, { input, cwd = REPO_ROOT, env } = {}) {
   const cmd = harnessCommand();
-  const res = spawnSync(cmd[0], [...cmd.slice(1), ...args], { cwd, input, encoding: "utf8" });
+  const res = spawnSync(cmd[0], [...cmd.slice(1), ...args], {
+    cwd,
+    input,
+    encoding: "utf8",
+    env: env ?? process.env,
+  });
   if (res.status === null) {
     if (res.error?.code === "ENOENT") {
       throw new Error(`harness binary not found (${cmd.join(" ")} in ${cwd})`);
@@ -45,6 +50,12 @@ function runHarness(args, { input, cwd = REPO_ROOT } = {}) {
     throw new Error(`harness was killed by signal ${res.signal}`);
   }
   return { status: res.status, stdout: res.stdout ?? "", stderr: res.stderr ?? "" };
+}
+
+function assertSuccessLifecycle(stderr) {
+  const records = stderr.trim().split("\n").filter(Boolean).map((line) => JSON.parse(line));
+  assert.equal(records[0]?.event, "started");
+  assert.equal(records.at(-1)?.event, "done");
 }
 
 /** Session files directly under a session dir (the repo layout nests one
@@ -75,7 +86,9 @@ test("unwritable session dir exits 3 with empty stdout [DEC Exit Codes: 3 - sess
   ]);
   assert.equal(status, 3, `session-write failure must exit 3 (got ${status}); stderr: ${stderr}`);
   assert.equal(stdout, "", "stdout must be machine-clean and empty unless exit 0");
-  assert.ok(stderr.length > 0, "stderr must carry a human-readable session error");
+  const failed = JSON.parse(stderr.trim().split("\n").at(-1));
+  assert.equal(failed.event, "failed");
+  assert.equal(failed.exit_code, 3);
 });
 
 // ---------------------------------------------------------------------------
@@ -116,7 +129,7 @@ test(
       "Reply with the single word ok.",
     ]);
     assert.equal(status, 0, `summon must exit 0 (got ${status}); stderr: ${stderr}`);
-    assert.equal(stderr, "", "stderr must be empty on success");
+    assertSuccessLifecycle(stderr);
     const env = JSON.parse(stdout);
     assert.equal(typeof env.output, "string");
     assert.ok(env.session_id !== null && typeof env.session_id === "string" && env.session_id.length > 0,
@@ -133,14 +146,12 @@ test(
 
 test("summon with --no-session writes nothing and reports a null session_id", { skip: LIVE_SKIP }, () => {
   const dir = mkdtempSync(join(tmpdir(), "miniharness-nosession-"));
-  const { status, stdout, stderr } = runHarness([
-    "--no-session",
-    "--session-dir",
-    dir,
-    "Reply with the single word ok.",
-  ]);
+  const { status, stdout, stderr } = runHarness(
+    ["--no-session", "Reply with the single word ok."],
+    { env: { ...process.env, MINIHARNESS_SESSION_DIR: dir } },
+  );
   assert.equal(status, 0, `summon must exit 0 (got ${status}); stderr: ${stderr}`);
-  assert.equal(stderr, "", "stderr must be empty on success");
+  assertSuccessLifecycle(stderr);
   const env = JSON.parse(stdout);
   assert.equal(env.session_id, null, "session_id must be null with --no-session");
   assert.deepEqual(sessionFiles(dir), [], "--no-session must not write any session file");
