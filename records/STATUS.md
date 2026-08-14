@@ -6,14 +6,15 @@ Do not use it as a transcript or a scratchpad.
 
 ## Snapshot
 
-- Last updated: 2026-08-09
+- Last updated: 2026-08-14
 - Overall posture: `active`
-- Current focus: DEC-20260809-001 default lifecycle observability implemented
-  and offline-proven; heatmap consumption remains part of cutover.
+- Current focus: persisted-session resumption is implemented and offline-proven
+  for heatmap's bounded Hermes correction workflow.
 - Highest-priority blocker: none.
 - Next operator decision needed: heatmap cutover timing (mid-term track); setup-side registry→models.json generator (setup-repo task).
 - Related decisions: DEC-20260808-001 (CLI summon contract), DEC-20260808-002
-  (CLI OAuth credential reuse), DEC-20260809-001 (default lifecycle events)
+  (CLI OAuth credential reuse), DEC-20260809-001 (default lifecycle events),
+  DEC-20260814-001 (persisted-session resumption)
 - Origin research: heatmap `records/research/RSH-20260808-001-miniharness-opencode-replacement.md`
 
 ## Current State Summary
@@ -28,7 +29,11 @@ one JSON envelope out, meaningful exit codes, registry-driven
 provider/model/effort resolution including custom OpenAI-compatible
 providers. Summons now project Pi agent events into versioned, content-free
 lifecycle NDJSON on stderr by default; `--silent` suppresses non-failure
-records. Nothing forked, nothing adopted beyond the two pinned libraries.
+records. `--resume` now reconstructs an existing Pi conversation, appends one
+new turn to the same JSONL file, and preserves its session id; unsafe or
+missing ids fail as bad invocations. The code and tests are committed, while
+the published npm package remains at 0.1.2 until a separate release. Nothing
+forked, nothing adopted beyond the two pinned libraries.
 
 ## Active Phases Or Tracks
 

@@ -202,6 +202,52 @@ test('--compaction off skips compaction even on overflow', () => {
   assert.equal(entry, undefined, 'session must not contain a compaction entry');
 });
 
+test('--resume appends a correction turn to the existing session and keeps its id', () => {
+  const sessionDir = freshSessionDir();
+  const first = runHarness(
+    [
+      '--config-dir', fixtureDir,
+      '--provider', 'stub',
+      '--model', STUB_MODEL,
+      '--compaction', 'off',
+      SHORT_PROMPT,
+    ],
+    { env: { ...process.env, MINIHARNESS_SESSION_DIR: sessionDir } },
+  );
+  assert.equal(first.status, 0, `initial summon failed: ${first.stderr}`);
+  const firstEnvelope = JSON.parse(first.stdout);
+  assert.ok(firstEnvelope.session_id);
+  const firstFiles = sessionFiles(sessionDir);
+  assert.equal(firstFiles.length, 1);
+
+  const resumed = runHarness(
+    [
+      '--compaction',
+      'off',
+      '--config-dir',
+      fixtureDir,
+      '--provider',
+      'stub',
+      '--model',
+      STUB_MODEL,
+      '--resume',
+      firstEnvelope.session_id,
+      'please correct your previous answer',
+    ],
+    { env: { ...process.env, MINIHARNESS_SESSION_DIR: sessionDir } },
+  );
+  assert.equal(resumed.status, 0, `resumed summon failed: ${resumed.stderr}`);
+  const resumedEnvelope = JSON.parse(resumed.stdout);
+  assert.equal(resumedEnvelope.session_id, firstEnvelope.session_id);
+  assert.deepEqual(sessionFiles(sessionDir), firstFiles);
+
+  const lines = readSessionLines(sessionDir);
+  const userTexts = lines
+    .filter((entry) => entry.type === 'message' && entry.message?.role === 'user')
+    .map((entry) => entry.message.content?.[0]?.text);
+  assert.deepEqual(userTexts, [SHORT_PROMPT, 'please correct your previous answer']);
+});
+
 // ---------------------------------------------------------------------------
 // Direct compaction module exercise (library seam, no harness spawn)
 // ---------------------------------------------------------------------------

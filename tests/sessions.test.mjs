@@ -156,3 +156,29 @@ test("summon with --no-session writes nothing and reports a null session_id", { 
   assert.equal(env.session_id, null, "session_id must be null with --no-session");
   assert.deepEqual(sessionFiles(dir), [], "--no-session must not write any session file");
 });
+
+test("--resume rejects an unknown or unsafe session id before provider resolution", () => {
+  const dir = mkdtempSync(join(tmpdir(), "miniharness-resume-invalid-"));
+  for (const id of ["missing-session", "../escape"]) {
+    const { status, stdout, stderr } = runHarness([
+      "--session-dir",
+      dir,
+      "--resume",
+      id,
+      "correct the previous answer",
+    ]);
+    assert.equal(status, 2, `invalid resume id must be exit 2: ${stderr}`);
+    assert.equal(stdout, "");
+  }
+});
+
+test("--no-session and --resume are mutually exclusive", () => {
+  const { status, stdout } = runHarness([
+    "--no-session",
+    "--resume",
+    "session-1",
+    "correction",
+  ]);
+  assert.equal(status, 2);
+  assert.equal(stdout, "");
+});

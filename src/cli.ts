@@ -6,6 +6,7 @@ import {
   Agent,
   compact,
   DEFAULT_COMPACTION_SETTINGS,
+  buildSessionContext,
   estimateContextTokens,
   prepareCompaction,
   shouldCompact,
@@ -73,6 +74,16 @@ interface SessionConfig {
   enabled: boolean;
   /** Session dir when sessions are on. */
   sessionDir?: string;
+  /** Existing JSONL session to continue. */
+  resume?: string;
+}
+
+interface OpenSession {
+  fs: NodeExecutionEnv;
+  session: Session;
+  id: string;
+  /** Messages Pi reconstructs from the existing session branch. */
+  initialMessages: AgentMessage[];
 }
 
 /**
@@ -102,6 +113,7 @@ interface Flags {
   systemPromptFile?: string;
   cwd?: string;
   sessionDir?: string;
+  resume?: string;
   noSession: boolean;
   configDir?: string;
   /** Suppress non-failure lifecycle records (DEC-20260809-001). */
@@ -257,6 +269,9 @@ function resolveModel(flags: Flags): ResolvedModel {
  */
 function openSession(flags: Flags): SessionConfig {
   if (flags.noSession) {
+    if (flags.resume !== undefined) {
+      usageError("--no-session and --resume are mutually exclusive");
+    }
     if (flags.sessionDir !== undefined) {
       usageError("--no-session and --session-dir are mutually exclusive");
     }
@@ -265,7 +280,45 @@ function openSession(flags: Flags): SessionConfig {
   return {
     enabled: true,
     sessionDir: flags.sessionDir ?? process.env.MINIHARNESS_SESSION_DIR ?? DEFAULT_SESSION_DIR,
+    resume: flags.resume,
   };
+}
+
+const SAFE_SESSION_ID = /^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/;
+
+/**
+ * Open an existing Pi JSONL session through the library. The repository is
+ * deliberately used for both discovery and reading: this keeps validation,
+ * JSONL decoding, compaction handling, and branch selection in pi-agent-core
+ * instead of duplicating its file format here.
+ */
+async function openResumedSession(dir: string, id: string): Promise<OpenSession> {
+  if (!SAFE_SESSION_ID.test(id)) {
+    usageError("--resume must be a safe session identifier");
+  }
+  const fs = new NodeExecutionEnv({ cwd: process.cwd() });
+  try {
+    const repo = new JsonlSessionRepo({ fs, sessionsRoot: dir });
+    let metadata;
+    try {
+      metadata = (await repo.list()).find((candidate) => candidate.id === id);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      usageError(`cannot read resumed session ${id}: ${detail}`);
+    }
+    if (metadata === undefined) {
+      usageError(`resumed session not found: ${id}`);
+    }
+    const session = await repo.open(metadata);
+    const entries = await session.findEntries({ order: "oldestFirst" });
+    const context = buildSessionContext(entries);
+    return { fs, session, id, initialMessages: context.messages };
+  } catch (error) {
+    await fs.cleanup();
+    if (error instanceof ExitSignal) throw error;
+    const detail = error instanceof Error ? error.message : String(error);
+    usageError(`cannot resume session ${id}: ${detail}`);
+  }
 }
 
 /**
@@ -322,6 +375,25 @@ async function writeSession(
   await session.getLog();
   await fs.cleanup();
   return metadata.id;
+}
+
+/** Append only the new turn to an already-open session. */
+async function appendSession(
+  open: OpenSession,
+  messages: AgentMessage[],
+  compactionEntry?: CompactionEntry,
+): Promise<void> {
+  try {
+    for (const message of messages) {
+      await open.session.appendMessage(message);
+    }
+    if (compactionEntry !== undefined) {
+      await open.session.appendEntry(compactionEntry, "main");
+    }
+    await open.session.getLog();
+  } finally {
+    await open.fs.cleanup();
+  }
 }
 
 function fail(message: string): never {
@@ -564,6 +636,7 @@ function parseArgv(argv: string[]): { flags: Flags; positionals: string[] } {
     ["--system-prompt-file", (v) => (flags.systemPromptFile = v)],
     ["--cwd", (v) => (flags.cwd = v)],
     ["--session-dir", (v) => (flags.sessionDir = v)],
+    ["--resume", (v) => (flags.resume = v)],
     ["--config-dir", (v) => (flags.configDir = v)],
   ]);
 
@@ -660,6 +733,7 @@ Options:
   --system-prompt-file <path>  System prompt from a file ("-" = stdin)
   --cwd <path>               Working directory (must exist; default: process cwd)
   --session-dir <path>       Session JSONL directory (default: ~/.local/share/miniharness/sessions)
+  --resume <session-id>      Continue an existing JSONL session in place
   --no-session               Do not persist a session
   --silent                   Suppress lifecycle/progress events (failures remain)
   --config-dir <path>        Config directory holding models.json
@@ -738,6 +812,10 @@ async function main(): Promise<void> {
   if (session.enabled && session.sessionDir !== undefined) {
     await assertSessionDirWritable(session.sessionDir);
   }
+  const resumed =
+    session.enabled && session.sessionDir !== undefined && session.resume !== undefined
+      ? await openResumedSession(session.sessionDir, session.resume)
+      : undefined;
   const resolved = resolveModel(flags);
 
   // DEC-20260808-002: the credential store reads the operator's Claude
@@ -781,7 +859,7 @@ async function main(): Promise<void> {
       model: resolved.model,
       thinkingLevel: resolved.thinkingLevel,
       tools: [],
-      messages: [],
+      messages: resumed?.initialMessages ?? [],
     },
     streamFn: (m, ctx, opts) => models.streamSimple(m, ctx, opts),
   });
@@ -830,9 +908,16 @@ async function main(): Promise<void> {
   let sessionId: string | null = null;
   if (session.enabled && session.sessionDir !== undefined) {
     try {
-      sessionId = await writeSession(messages, session.sessionDir, compactionEntry);
+      if (resumed !== undefined) {
+        const appended = messages.slice(resumed.initialMessages.length);
+        await appendSession(resumed, appended, compactionEntry);
+        sessionId = resumed.id;
+      } else {
+        sessionId = await writeSession(messages, session.sessionDir, compactionEntry);
+      }
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
+      if (resumed !== undefined) await resumed.fs.cleanup();
       internalError(`session write failed: ${detail}`);
     }
   }

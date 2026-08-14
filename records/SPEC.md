@@ -9,9 +9,9 @@ Keep it durable. Do not use it as a changelog, inbox, or weekly narrative.
 - Canonical repo: `LPFchan/miniharness` (private)
 - Project id: `miniharness`
 - Operator: LPFchan
-- Last updated: 2026-08-09
+- Last updated: 2026-08-14
 - Related decisions: DEC-20260808-001, DEC-20260808-002,
-  DEC-20260809-001
+  DEC-20260809-001, DEC-20260814-001
 - Origin research: heatmap `records/research/RSH-20260808-001-miniharness-opencode-replacement.md`
 
 ## Project Thesis
@@ -51,6 +51,8 @@ week scope. The harness replaces `opencode run` in that path
 - 8–16 concurrent instances, concurrency capped in the low teens.
 - Session persistence as JSONL at a harness-owned path, so heatmap's
   adoption/recovery join survives without a database.
+- Same-file session resumption by stable session id for bounded caller-driven
+  correction workflows.
 - Compaction support.
 
 ## Invariants
@@ -104,7 +106,10 @@ record is canonical. Summary:
   cwd with a `--cwd` override.
 - **Sessions**: JSONL at `~/.local/share/miniharness/sessions/` by default,
   on by default (heatmap's adoption join reads them), `--no-session` opts
-  out, `--session-dir` overrides.
+  out, `--session-dir` overrides. `--resume <session-id>` reconstructs an
+  existing Pi conversation from that directory, appends one new turn to the
+  same JSONL file, and returns the same id; unknown or unsafe ids are usage
+  errors, and resumption cannot be combined with `--no-session`.
 - **Config**: `models.json` consumed from `PI_CODING_AGENT_DIR`
   (setup-managed), `--config-dir` override.
 - **Boundaries**: no harness-side timeout (caller owns the deadline), no

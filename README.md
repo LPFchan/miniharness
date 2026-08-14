@@ -51,13 +51,20 @@ Flags: `--provider <name>`, `--model <id-or-tier>` (`haiku`/`sonnet`/`opus`),
 `--effort <level>`, `--system-prompt <text>`, `--system-prompt-file <path>`
 (`-` = stdin; stdin serves either the prompt or the system prompt, not both),
 `--cwd <path>` (must exist and be a directory), `--session-dir <path>`,
-`--no-session`, `--compaction <off|auto>` (default `auto`: when a completed
+`--resume <session-id>`, `--no-session`, `--compaction <off|auto>` (default `auto`: when a completed
 transcript would overflow the model's context window, the library's compaction
 summarizes the history and records the compaction entry in the session
 JSONL; the envelope is unchanged), `--config-dir <path>` (override for the
 directory holding `models.json`; default is `PI_CODING_AGENT_DIR` or
 `~/.pi/agent/`), `--silent` (suppress lifecycle/progress events; failures
 remain), and `--help`.
+
+Sessions are saved as Pi JSONL files by default. Pass `--resume <session-id>`
+with the same session directory to continue an existing conversation. The
+session is opened and its existing branch is reconstructed by Pi, then the
+new user/assistant turn is appended to that same file; the success envelope
+reports the same `session_id`. Resuming an unknown, malformed, or unsafe id is
+a usage error (exit 2). `--resume` cannot be combined with `--no-session`.
 
 ```sh
 node dist/cli.js "say hi"
