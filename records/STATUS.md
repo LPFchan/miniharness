@@ -8,8 +8,8 @@ Do not use it as a transcript or a scratchpad.
 
 - Last updated: 2026-08-14
 - Overall posture: `active`
-- Current focus: persisted-session resumption is implemented and offline-proven
-  for heatmap's bounded Hermes correction workflow.
+- Current focus: persisted-session resumption is published in npm release
+  0.1.3 for heatmap's bounded Hermes correction workflow.
 - Highest-priority blocker: none.
 - Next operator decision needed: heatmap cutover timing (mid-term track); setup-side registry→models.json generator (setup-repo task).
 - Related decisions: DEC-20260808-001 (CLI summon contract), DEC-20260808-002
@@ -31,9 +31,9 @@ providers. Summons now project Pi agent events into versioned, content-free
 lifecycle NDJSON on stderr by default; `--silent` suppresses non-failure
 records. `--resume` now reconstructs an existing Pi conversation, appends one
 new turn to the same JSONL file, and preserves its session id; unsafe or
-missing ids fail as bad invocations. The code and tests are committed, while
-the published npm package remains at 0.1.2 until a separate release. Nothing
-forked, nothing adopted beyond the two pinned libraries.
+missing ids fail as bad invocations. npm release 0.1.3 publishes this contract
+under the `latest` tag and has been verified through a clean installation.
+Nothing forked, nothing adopted beyond the two pinned libraries.
 
 ## Active Phases Or Tracks
 
@@ -112,6 +112,15 @@ forked, nothing adopted beyond the two pinned libraries.
 - Related ids: RSH-20260809-001, DEC-20260809-001.
 
 ## Recent Changes To Project Reality
+
+- Date: 2026-08-14
+  - Change: 0.1.3 published to npmjs with persisted-session resumption. The
+    registry reports `latest` as 0.1.3 with shasum
+    `30dab09431a2eaf9c54ba2902f54577e696789c7`; a clean temporary installation
+    resolved the package and ran the packaged `miniharness --help` entrypoint.
+  - Why it matters: heatmap can install the released `--resume` contract needed
+    for same-session project-correction turns.
+  - Related ids: DEC-20260814-001, LOG-20260814-135547-exroot.
 
 - Date: 2026-08-09
   - Change: DEC-20260809-001 implemented. Miniharness now emits default
