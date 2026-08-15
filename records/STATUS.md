@@ -8,11 +8,10 @@ Do not use it as a transcript or a scratchpad.
 
 - Last updated: 2026-08-15
 - Overall posture: `active`
-- Current focus: explicit remote MCP attachment and durable caller-purpose
-  metadata are published in npm release 0.1.4 for Heatmap's chat path.
+- Current focus: the live-verified remote MCP and persisted-session path is
+  published in npm release 0.1.7 for Heatmap chat.
 - Highest-priority blocker: none.
-- Next operator decision needed: none in this repo; Heatmap chat enablement waits
-  for the setup provider-module rework and its registry projection.
+- Next operator decision needed: none in this repo.
 - Related decisions: DEC-20260808-001 (CLI summon contract), DEC-20260808-002
   (CLI OAuth credential reuse), DEC-20260809-001 (default lifecycle events),
   DEC-20260814-001 (persisted-session resumption)
@@ -32,10 +31,11 @@ providers. Summons now project Pi agent events into versioned, content-free
 lifecycle NDJSON on stderr by default; `--silent` suppresses non-failure
 records. `--resume` reconstructs an existing Pi conversation, appends one new
 turn to the same JSONL file, and preserves its session id; unsafe or missing
-ids fail as bad invocations. Release 0.1.4 adds explicit remote Streamable HTTP
-MCP servers, complete unique tool allowlists, safe endpoint validation, and a
-durable `--purpose` session marker. npm release 0.1.4 publishes this contract
-under the `latest` tag.
+ids fail as bad invocations. Release 0.1.7 carries explicit remote Streamable
+HTTP MCP servers, complete unique tool allowlists, safe endpoint validation,
+durable `--purpose` metadata, repeatable MCP CLI flags, and JSON-safe persisted
+provider messages. The packaged global binary completed and resumed a real
+Cloudflare Gemma conversation through Heatmap's eight-tool allowlist.
 Nothing forked, nothing adopted beyond the two pinned libraries.
 
 ## Active Phases Or Tracks
@@ -120,6 +120,18 @@ Nothing forked, nothing adopted beyond the two pinned libraries.
 - Related ids: RSH-20260809-001, DEC-20260809-001.
 
 ## Recent Changes To Project Reality
+
+- Date: 2026-08-15
+  - Change: 0.1.7 published to npmjs with shasum
+    `c1a48985d6170de9baa4bfca1e20d5d31a0849d2`. The full suite passes 97
+    tests with 6 intentional live skips. The packaged global binary called
+    Heatmap's `describe_capabilities` through the complete eight-tool
+    allowlist, persisted `PACKAGE_OK`, then resumed the same session id and
+    appended `PACKAGE_RESUME_OK` through Cloudflare Gemma 4.
+  - Why it matters: Heatmap chat can use the documented repeatable flags and
+    retain tool-call conversations without violating Pi's strict JSON session
+    boundary.
+  - Related ids: DEC-20260815-001.
 
 - Date: 2026-08-15
   - Change: 0.1.5 published to npmjs with `--version`,
