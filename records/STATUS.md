@@ -6,12 +6,13 @@ Do not use it as a transcript or a scratchpad.
 
 ## Snapshot
 
-- Last updated: 2026-08-14
+- Last updated: 2026-08-15
 - Overall posture: `active`
-- Current focus: persisted-session resumption is published in npm release
-  0.1.3 for heatmap's bounded Hermes correction workflow.
+- Current focus: explicit remote MCP attachment and durable caller-purpose
+  metadata are published in npm release 0.1.4 for Heatmap's chat path.
 - Highest-priority blocker: none.
-- Next operator decision needed: heatmap cutover timing (mid-term track); setup-side registry→models.json generator (setup-repo task).
+- Next operator decision needed: none in this repo; Heatmap chat enablement waits
+  for the setup provider-module rework and its registry projection.
 - Related decisions: DEC-20260808-001 (CLI summon contract), DEC-20260808-002
   (CLI OAuth credential reuse), DEC-20260809-001 (default lifecycle events),
   DEC-20260814-001 (persisted-session resumption)
@@ -29,10 +30,12 @@ one JSON envelope out, meaningful exit codes, registry-driven
 provider/model/effort resolution including custom OpenAI-compatible
 providers. Summons now project Pi agent events into versioned, content-free
 lifecycle NDJSON on stderr by default; `--silent` suppresses non-failure
-records. `--resume` now reconstructs an existing Pi conversation, appends one
-new turn to the same JSONL file, and preserves its session id; unsafe or
-missing ids fail as bad invocations. npm release 0.1.3 publishes this contract
-under the `latest` tag and has been verified through a clean installation.
+records. `--resume` reconstructs an existing Pi conversation, appends one new
+turn to the same JSONL file, and preserves its session id; unsafe or missing
+ids fail as bad invocations. Release 0.1.4 adds explicit remote Streamable HTTP
+MCP servers, complete unique tool allowlists, safe endpoint validation, and a
+durable `--purpose` session marker. npm release 0.1.4 publishes this contract
+under the `latest` tag.
 Nothing forked, nothing adopted beyond the two pinned libraries.
 
 ## Active Phases Or Tracks
@@ -83,7 +86,10 @@ Nothing forked, nothing adopted beyond the two pinned libraries.
   off|auto` (default auto) runs pi-agent-core's compaction on a completed
   transcript that would overflow the context window and persists the
   compaction entry to the session JSONL; the DEC envelope is unchanged.
-  Suite: 64 tests, 59 pass, 0 fail, 5 live skips, 0 todo. Live-verified
+  The explicit MCP extension discovers tools before the model starts, requires
+  every allowlisted name across the combined server set, rejects duplicates,
+  permits plain HTTP only on loopback, and accepts no URL credentials. Suite:
+  92 tests, 86 pass, 0 fail, 6 live skips, 0 todo. Live-verified
   on crofai (deepseek-v4-flash-0731): exit 0 envelope + session JSONL +
   stage-key probe recovery.
 - Exit criteria: met pending heatmap cutover.
@@ -112,6 +118,16 @@ Nothing forked, nothing adopted beyond the two pinned libraries.
 - Related ids: RSH-20260809-001, DEC-20260809-001.
 
 ## Recent Changes To Project Reality
+
+- Date: 2026-08-15
+  - Change: 0.1.4 published to npmjs with explicit remote MCP attachment and
+    durable caller-purpose metadata. The registry reports shasum
+    `99e57edd204002b4135b7fb83cef5e3329b02f45`; the prepublish build and all 92
+    tests passed (86 offline passes, 6 intentional live-provider skips).
+  - Why it matters: Heatmap can give a chat summon exactly its eight read-only
+    MCP tools and account its persisted session as `chat_sidebar`, without
+    changing ordinary recap summons or provider enrollment.
+  - Related ids: LOG-20260815-201034-56luna.
 
 - Date: 2026-08-14
   - Change: 0.1.3 published to npmjs with persisted-session resumption. The

@@ -45,14 +45,16 @@ week scope. The harness replaces `opencode run` in that path
   the operator's existing Claude Code / Codex CLI logins, with refresh
   write-back to the CLI files (DEC-20260808-002).
 - Resilient retry (408/409/429/5xx, honour `retry-after`).
-- Tool and MCP support, but **no MCP server and no sub-agents by default**;
-  both reachable only through explicit extension.
+- Explicit remote Streamable HTTP MCP client attachment with a complete tool
+  allowlist, but **no MCP server and no sub-agents by default**; capabilities
+  are present only when the caller supplies `--mcp-server` and `--mcp-tool`.
 - Absolutely minimal system prompt and resource footprint.
 - 8–16 concurrent instances, concurrency capped in the low teens.
 - Session persistence as JSONL at a harness-owned path, so heatmap's
   adoption/recovery join survives without a database.
 - Same-file session resumption by stable session id for bounded caller-driven
   correction workflows.
+- Caller-owned purpose metadata for durable downstream accounting boundaries.
 - Compaction support.
 
 ## Invariants
@@ -103,15 +105,23 @@ record is canonical. Summary:
   `--system-prompt-file` (first-class, replacing heatmap's prompt-gluing);
   `--provider` / `--model` / `--effort` selection resolved through setup's
   registry and the generated `thinkingLevelMap`; cwd defaults to the process
-  cwd with a `--cwd` override.
+  cwd with a `--cwd` override. `--purpose <identifier>` stores a bounded caller
+  marker in session metadata without changing the prompt.
 - **Sessions**: JSONL at `~/.local/share/miniharness/sessions/` by default,
   on by default (heatmap's adoption join reads them), `--no-session` opts
   out, `--session-dir` overrides. `--resume <session-id>` reconstructs an
   existing Pi conversation from that directory, appends one new turn to the
   same JSONL file, and returns the same id; unknown or unsafe ids are usage
   errors, and resumption cannot be combined with `--no-session`.
+  `--purpose` also requires session persistence.
 - **Config**: `models.json` consumed from `PI_CODING_AGENT_DIR`
   (setup-managed), `--config-dir` override.
+- **Remote MCP tools**: repeatable `--mcp-server <label>=<url>` attaches
+  explicit Streamable HTTP endpoints; repeatable `--mcp-tool <name>` is a
+  complete allowlist across their combined catalog. Every requested name must
+  exist and exposed names must be unique before the model starts. Plain HTTP
+  is loopback-only, endpoint URLs cannot carry credentials, and non-loopback
+  endpoints require HTTPS.
 - **Boundaries**: no harness-side timeout (caller owns the deadline), no
   harness-side concurrency cap (low-teens is operating guidance), opencode's
   unread `--title` label dropped.
