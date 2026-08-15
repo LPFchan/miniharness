@@ -12,6 +12,7 @@ import {
   shouldCompact,
   type AgentEvent,
   type AgentMessage,
+  type AgentTool,
   type CompactionEntry,
   type Entry,
 } from "@earendil-works/pi-agent-core";
@@ -39,6 +40,7 @@ import {
   resolveConfig,
   resolveConfigDir,
 } from "./config.js";
+import { discoverRemoteMcpTools, mergeRemoteMcpTools, RemoteMcpError } from "./mcp.js";
 
 /** Fixed by DEC-20260808-001: every field except `output` may be null. */
 interface Envelope {
@@ -76,6 +78,7 @@ interface SessionConfig {
   sessionDir?: string;
   /** Existing JSONL session to continue. */
   resume?: string;
+  purpose?: string;
 }
 
 interface OpenSession {
@@ -116,6 +119,9 @@ interface Flags {
   resume?: string;
   noSession: boolean;
   configDir?: string;
+  purpose?: string;
+  mcpServers: string[];
+  mcpTools: string[];
   /** Suppress non-failure lifecycle records (DEC-20260809-001). */
   silent: boolean;
   help: boolean;
@@ -275,12 +281,16 @@ function openSession(flags: Flags): SessionConfig {
     if (flags.sessionDir !== undefined) {
       usageError("--no-session and --session-dir are mutually exclusive");
     }
+    if (flags.purpose !== undefined) {
+      usageError("--no-session and --purpose are mutually exclusive");
+    }
     return { enabled: false };
   }
   return {
     enabled: true,
     sessionDir: flags.sessionDir ?? process.env.MINIHARNESS_SESSION_DIR ?? DEFAULT_SESSION_DIR,
     resume: flags.resume,
+    purpose: flags.purpose,
   };
 }
 
@@ -360,11 +370,15 @@ async function assertSessionDirWritable(dir: string): Promise<void> {
 async function writeSession(
   messages: AgentMessage[],
   dir: string,
+  purpose: string | undefined,
   compactionEntry?: CompactionEntry,
 ): Promise<string> {
   const fs = new NodeExecutionEnv({ cwd: process.cwd() });
   const repo = new JsonlSessionRepo({ fs, sessionsRoot: dir });
-  const session: Session = await repo.create({ cwd: process.cwd() });
+  const session: Session = await repo.create({
+    cwd: process.cwd(),
+    ...(purpose === undefined ? {} : { metadata: { purpose } }),
+  });
   const metadata = await session.getMetadata();
   for (const message of messages) {
     await session.appendMessage(message);
@@ -624,7 +638,14 @@ async function maybeCompact(
  * value, duplicated scalar flag, or more than one positional -> exit 2.
  */
 function parseArgv(argv: string[]): { flags: Flags; positionals: string[] } {
-  const flags: Flags = { noSession: false, silent: false, help: false, compaction: "auto" };
+  const flags: Flags = {
+    noSession: false,
+    silent: false,
+    help: false,
+    compaction: "auto",
+    mcpServers: [],
+    mcpTools: [],
+  };
   const positionals: string[] = [];
   const seen = new Set<string>();
   const valueFlags = new Map<string, (value: string) => void>([
@@ -638,6 +659,9 @@ function parseArgv(argv: string[]): { flags: Flags; positionals: string[] } {
     ["--session-dir", (v) => (flags.sessionDir = v)],
     ["--resume", (v) => (flags.resume = v)],
     ["--config-dir", (v) => (flags.configDir = v)],
+    ["--purpose", (v) => (flags.purpose = parsePurpose(v))],
+    ["--mcp-server", (v) => flags.mcpServers.push(v)],
+    ["--mcp-tool", (v) => flags.mcpTools.push(v)],
   ]);
 
   let i = 0;
@@ -713,6 +737,23 @@ function parseCompaction(value: string): "off" | "auto" {
   usageError(`--compaction must be "off" or "auto" (got "${value}")`);
 }
 
+const SAFE_PURPOSE = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
+
+function parsePurpose(value: string): string {
+  if (!SAFE_PURPOSE.test(value)) {
+    usageError("--purpose must be a safe identifier");
+  }
+  return value;
+}
+
+function parseMcpServer(value: string): { label: string; url: string } {
+  const separator = value.indexOf("=");
+  if (separator <= 0 || separator === value.length - 1) {
+    usageError("--mcp-server must be <label>=<url>");
+  }
+  return { label: value.slice(0, separator), url: value.slice(separator + 1) };
+}
+
 const USAGE = `Usage: miniharness [options] [prompt]
 
 Headless model summon. Prints one JSON envelope to stdout on success
@@ -734,6 +775,9 @@ Options:
   --cwd <path>               Working directory (must exist; default: process cwd)
   --session-dir <path>       Session JSONL directory (default: ~/.local/share/miniharness/sessions)
   --resume <session-id>      Continue an existing JSONL session in place
+  --purpose <identifier>     Durable purpose marker in session metadata
+  --mcp-server <label>=<url>  Attach one repeatable remote Streamable HTTP MCP server
+  --mcp-tool <name>           Restrict MCP calls to this repeatable tool name
   --no-session               Do not persist a session
   --silent                   Suppress lifecycle/progress events (failures remain)
   --config-dir <path>        Config directory holding models.json
@@ -851,6 +895,30 @@ async function main(): Promise<void> {
     );
   }
 
+  if (flags.mcpTools.length > 0 && flags.mcpServers.length === 0) {
+    usageError("--mcp-tool requires --mcp-server");
+  }
+  const allowedMcpTools = flags.mcpTools.length === 0 ? undefined : new Set(flags.mcpTools);
+  const remoteToolGroups: AgentTool[][] = [];
+  for (const raw of flags.mcpServers) {
+    const server = parseMcpServer(raw);
+    try {
+      remoteToolGroups.push(await discoverRemoteMcpTools({ ...server, allowedTools: allowedMcpTools }));
+    } catch (error) {
+      if (error instanceof RemoteMcpError) usageError(error.message);
+      usageError("MCP server discovery failed");
+    }
+  }
+  let remoteTools: AgentTool[] = [];
+  if (remoteToolGroups.length > 0) {
+    try {
+      remoteTools = mergeRemoteMcpTools(remoteToolGroups, allowedMcpTools);
+    } catch (error) {
+      if (error instanceof RemoteMcpError) usageError(error.message);
+      usageError("MCP server discovery failed");
+    }
+  }
+
   const agent = new Agent({
     initialState: {
       systemPrompt:
@@ -858,7 +926,7 @@ async function main(): Promise<void> {
         "You are miniharness, a minimal headless assistant. Reply concisely and directly.",
       model: resolved.model,
       thinkingLevel: resolved.thinkingLevel,
-      tools: [],
+      tools: remoteTools,
       messages: resumed?.initialMessages ?? [],
     },
     streamFn: (m, ctx, opts) => models.streamSimple(m, ctx, opts),
@@ -913,7 +981,7 @@ async function main(): Promise<void> {
         await appendSession(resumed, appended, compactionEntry);
         sessionId = resumed.id;
       } else {
-        sessionId = await writeSession(messages, session.sessionDir, compactionEntry);
+        sessionId = await writeSession(messages, session.sessionDir, session.purpose, compactionEntry);
       }
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);

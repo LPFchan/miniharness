@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -155,4 +155,27 @@ test('--help documents --silent without emitting lifecycle records', () => {
   assert.equal(status, 0);
   assert.match(stdout, /--silent/);
   assert.equal(stderr, '');
+});
+
+test('purpose marker is stored in the JSONL header without changing the prompt', () => {
+  const sessionDir = mkdtempSync(join(tmpdir(), 'miniharness-purpose-'));
+  const { status, stdout, stderr } = runHarness([
+    '--config-dir', fixtureConfigDir(),
+    '--provider', 'stub',
+    '--model', STUB_MODEL,
+    '--session-dir', sessionDir,
+    '--purpose', 'chat_sidebar',
+    'ordinary question',
+  ]);
+  assert.equal(status, 0, `purpose summon failed: ${stderr}`);
+  const envelope = JSON.parse(stdout);
+  assert.ok(envelope.session_id);
+  const session = readdirSync(sessionDir, { recursive: true })
+    .filter((file) => file.endsWith('.jsonl'))
+    .map((file) => join(sessionDir, file))
+    .find((file) => readFileSync(file, 'utf8').includes(envelope.session_id));
+  assert.ok(session);
+  const header = JSON.parse(readFileSync(session, 'utf8').split('\n')[0]);
+  assert.equal(header.metadata.purpose, 'chat_sidebar');
+  assert.ok(!readFileSync(session, 'utf8').includes('purpose: chat_sidebar'));
 });

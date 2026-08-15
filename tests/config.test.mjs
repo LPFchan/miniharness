@@ -372,3 +372,27 @@ test("resolveModel: model carries the registry provider name for routing", () =>
   // The pi provider that actually streams it (kimi-coding) is available in
   // the catalogue; the routed name stays the registry name per the DEC.
 });
+
+test("custom OpenAI-compatible providers resolve explicit models from config without /models discovery", () => {
+  const config = {
+    providers: {
+      cloudflare: {
+        base_url: "https://api.cloudflare.com/client/v4/accounts/test-account/ai/v1",
+        provider_type: "OpenAICompatible",
+        models: [{
+          id: "@cf/zai-org/glm-4.7-flash",
+          name: "GLM 4.7 Flash",
+          reasoning: false,
+          contextWindow: 131072,
+          maxTokens: 8192,
+          cost: { input: 0, output: 0 },
+        }],
+      },
+    },
+  };
+  const resolved = resolveModel(config, "cloudflare", "@cf/zai-org/glm-4.7-flash");
+  assert.equal(resolved.model.provider, "cloudflare");
+  assert.equal(resolved.model.baseUrl, config.providers.cloudflare.base_url);
+  assert.equal(resolved.model.contextWindow, 131072);
+  assert.equal(resolved.model.reasoning, false);
+});

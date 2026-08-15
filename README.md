@@ -12,8 +12,9 @@ See `records/SPEC.md` for the canonical spec and `records/REPO.md` for how this
 repo operates. Origin research: heatmap
 `records/research/RSH-20260808-001-miniharness-opencode-replacement.md`.
 
-**Status:** summon envelope, OAuth reuse, and default lifecycle contracts are
-implemented (`npm install && npm run build && npm test`); see
+**Status:** summon envelope, OAuth reuse, lifecycle, persisted sessions, and
+explicit remote MCP tools are implemented (`npm install && npm run build && npm
+test`); see
 `records/STATUS.md`.
 
 ## Install & prerequisite
@@ -51,13 +52,14 @@ Flags: `--provider <name>`, `--model <id-or-tier>` (`haiku`/`sonnet`/`opus`),
 `--effort <level>`, `--system-prompt <text>`, `--system-prompt-file <path>`
 (`-` = stdin; stdin serves either the prompt or the system prompt, not both),
 `--cwd <path>` (must exist and be a directory), `--session-dir <path>`,
-`--resume <session-id>`, `--no-session`, `--compaction <off|auto>` (default `auto`: when a completed
-transcript would overflow the model's context window, the library's compaction
-summarizes the history and records the compaction entry in the session
-JSONL; the envelope is unchanged), `--config-dir <path>` (override for the
-directory holding `models.json`; default is `PI_CODING_AGENT_DIR` or
-`~/.pi/agent/`), `--silent` (suppress lifecycle/progress events; failures
-remain), and `--help`.
+`--resume <session-id>`, `--purpose <identifier>`, repeatable
+`--mcp-server <label>=<url>`, repeatable `--mcp-tool <name>`, `--no-session`,
+`--compaction <off|auto>` (default `auto`: when a completed transcript would
+overflow the model's context window, the library's compaction summarizes the
+history and records the compaction entry in the session JSONL; the envelope is
+unchanged), `--config-dir <path>` (override for the directory holding
+`models.json`; default is `PI_CODING_AGENT_DIR` or `~/.pi/agent/`), `--silent`
+(suppress lifecycle/progress events; failures remain), and `--help`.
 
 Sessions are saved as Pi JSONL files by default. Pass `--resume <session-id>`
 with the same session directory to continue an existing conversation. The
@@ -65,6 +67,29 @@ session is opened and its existing branch is reconstructed by Pi, then the
 new user/assistant turn is appended to that same file; the success envelope
 reports the same `session_id`. Resuming an unknown, malformed, or unsafe id is
 a usage error (exit 2). `--resume` cannot be combined with `--no-session`.
+
+### Remote MCP tools
+
+Attach an explicit, read-only Streamable HTTP MCP server and allow only the
+Heatmap tools needed by the caller:
+
+```sh
+miniharness \
+  --provider "$PROVIDER" --model "$MODEL" --effort low \
+  --purpose chat_sidebar \
+  --mcp-server heatmap=http://127.0.0.1:8777/mcp \
+  --mcp-tool query_activity \
+  --mcp-tool query_cost \
+  "How did my activity change this week?"
+```
+
+`--mcp-server` and `--mcp-tool` may be repeated. The explicit tool list is a
+complete allowlist across all configured servers: every requested name must be
+available, and duplicate exposed names are rejected before the model starts.
+Plain HTTP MCP URLs are allowed only for loopback hosts; use HTTPS for a
+non-loopback endpoint. MCP URLs must not contain username or password
+credentials. `--purpose` is stored in the session metadata and therefore
+requires a session; it cannot be combined with `--no-session`.
 
 ```sh
 node dist/cli.js "say hi"
