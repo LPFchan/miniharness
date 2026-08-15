@@ -669,6 +669,7 @@ function parseArgv(argv: string[]): { flags: Flags; positionals: string[] } {
   };
   const positionals: string[] = [];
   const seen = new Set<string>();
+  const repeatableValueFlags = new Set(["--mcp-server", "--mcp-tool"]);
   const valueFlags = new Map<string, (value: string) => void>([
     ["--provider", (v) => (flags.provider = v)],
     ["--model", (v) => (flags.model = v)],
@@ -720,7 +721,7 @@ function parseArgv(argv: string[]): { flags: Flags; positionals: string[] } {
       if (!valueFlags.has(name)) {
         usageError(`unknown flag: ${name}`);
       }
-      if (seen.has(name)) {
+      if (seen.has(name) && !repeatableValueFlags.has(name)) {
         usageError(`flag given more than once: ${name}`);
       }
       seen.add(name);

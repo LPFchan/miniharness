@@ -97,6 +97,19 @@ test('duplicated scalar flag exits 2', () => {
   assertBadInvocation(['--provider', 'a', '--provider', 'b', 'hi']);
 });
 
+test('MCP server and tool flags are repeatable', () => {
+  const { status, stdout, stderr } = runHarness([
+    '--mcp-server', 'first=http://127.0.0.1:1/mcp',
+    '--mcp-server', 'second=http://127.0.0.1:2/mcp',
+    '--mcp-tool', 'query_activity',
+    '--mcp-tool', 'query_cost',
+    '--help',
+  ]);
+  assert.equal(status, 0, `repeatable MCP flags must parse (got ${status}); stderr: ${stderr}`);
+  assert.match(stdout, /Usage: miniharness/);
+  assert.equal(stderr, '');
+});
+
 test('--compaction valid values parse', () => {
   // Any parseable --compaction value must be accepted by the parser; with a
   // fixture config dir and the fault-injection hook the summon fails at the
