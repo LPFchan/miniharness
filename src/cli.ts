@@ -29,6 +29,7 @@ import {
 } from "@earendil-works/pi-ai";
 import { builtinProviders } from "@earendil-works/pi-ai/providers/all";
 import { readFileSync, statSync, writeSync } from "node:fs";
+import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import {
@@ -105,6 +106,23 @@ interface CompactionOutcome {
 /** DEC-20260808-001 (Sessions And Config): default JSONL session directory. */
 const DEFAULT_SESSION_DIR = join(homedir(), ".local", "share", "miniharness", "sessions");
 
+/** The package manifest is shipped beside dist/ in the published package. */
+const PACKAGE_VERSION = (createRequire(import.meta.url)("../package.json") as { version: string }).version;
+
+/** Keep inline generation options bounded before parsing or echoing them. */
+const MAX_GEN_PARAMS_BYTES = 16 * 1024;
+const MAX_STOP_STRING_BYTES = 256;
+const MAX_STOP_ARRAY_LENGTH = 16;
+const MAX_STOP_TOTAL_BYTES = 2 * 1024;
+
+interface GenerationParams {
+  temperature?: number;
+  max_tokens?: number;
+  seed?: number;
+  top_p?: number;
+  stop?: string | string[];
+}
+
 /** Every flag the DEC defines. */
 interface Flags {
   provider?: string;
@@ -114,6 +132,8 @@ interface Flags {
   compaction: "off" | "auto";
   systemPrompt?: string;
   systemPromptFile?: string;
+  noSystemPrompt: boolean;
+  genParams?: GenerationParams;
   cwd?: string;
   sessionDir?: string;
   resume?: string;
@@ -639,6 +659,7 @@ async function maybeCompact(
  */
 function parseArgv(argv: string[]): { flags: Flags; positionals: string[] } {
   const flags: Flags = {
+    noSystemPrompt: false,
     noSession: false,
     silent: false,
     help: false,
@@ -655,6 +676,7 @@ function parseArgv(argv: string[]): { flags: Flags; positionals: string[] } {
     ["--compaction", (v) => (flags.compaction = parseCompaction(v))],
     ["--system-prompt", (v) => (flags.systemPrompt = v)],
     ["--system-prompt-file", (v) => (flags.systemPromptFile = v)],
+    ["--gen-params", (v) => (flags.genParams = parseGenerationParams(v))],
     ["--cwd", (v) => (flags.cwd = v)],
     ["--session-dir", (v) => (flags.sessionDir = v)],
     ["--resume", (v) => (flags.resume = v)],
@@ -682,6 +704,10 @@ function parseArgv(argv: string[]): { flags: Flags; positionals: string[] } {
     }
     if (arg === "--no-session") {
       flags.noSession = true;
+      continue;
+    }
+    if (arg === "--no-system-prompt") {
+      flags.noSystemPrompt = true;
       continue;
     }
     if (arg === "--silent") {
@@ -725,7 +751,131 @@ function parseArgv(argv: string[]): { flags: Flags; positionals: string[] } {
   if (positionals.length > 1) {
     usageError("expected at most one prompt argument");
   }
+  if (flags.noSystemPrompt && (flags.systemPrompt !== undefined || flags.systemPromptFile !== undefined)) {
+    usageError("--no-system-prompt cannot be combined with a supplied system prompt");
+  }
   return { flags, positionals };
+}
+
+function invalidGenerationParams(): never {
+  usageError("--gen-params must be a bounded JSON object with the supported generation fields");
+}
+
+function boundedStopString(value: string): boolean {
+  return Buffer.byteLength(value, "utf8") <= MAX_STOP_STRING_BYTES;
+}
+
+/** Parse the deliberately inline-only --gen-params object without echoing it. */
+function parseGenerationParams(raw: string): GenerationParams {
+  if (Buffer.byteLength(raw, "utf8") > MAX_GEN_PARAMS_BYTES) invalidGenerationParams();
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    invalidGenerationParams();
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    invalidGenerationParams();
+  }
+
+  const object = parsed as Record<string, unknown>;
+  const allowed = new Set(["temperature", "max_tokens", "seed", "top_p", "stop"]);
+  for (const key of Object.keys(object)) {
+    if (!allowed.has(key) || key === "__proto__" || key === "constructor" || key === "prototype") {
+      invalidGenerationParams();
+    }
+  }
+
+  const temperature = object.temperature;
+  if (temperature !== undefined &&
+      (typeof temperature !== "number" || !Number.isFinite(temperature) || temperature < 0)) {
+    invalidGenerationParams();
+  }
+  const maxTokens = object.max_tokens;
+  if (maxTokens !== undefined &&
+      (typeof maxTokens !== "number" || !Number.isSafeInteger(maxTokens) || maxTokens <= 0)) {
+    invalidGenerationParams();
+  }
+  const seed = object.seed;
+  if (seed !== undefined &&
+      (typeof seed !== "number" || !Number.isSafeInteger(seed) || seed < 0)) {
+    invalidGenerationParams();
+  }
+  const topP = object.top_p;
+  if (topP !== undefined &&
+      (typeof topP !== "number" || !Number.isFinite(topP) || topP <= 0 || topP > 1)) {
+    invalidGenerationParams();
+  }
+
+  const stop = object.stop;
+  if (stop !== undefined) {
+    if (typeof stop === "string") {
+      if (!boundedStopString(stop)) invalidGenerationParams();
+    } else if (Array.isArray(stop)) {
+      if (stop.length > MAX_STOP_ARRAY_LENGTH ||
+          stop.some((item) => typeof item !== "string" || !boundedStopString(item)) ||
+          stop.reduce((total, item) => total + Buffer.byteLength(item as string, "utf8"), 0) > MAX_STOP_TOTAL_BYTES) {
+        invalidGenerationParams();
+      }
+    } else {
+      invalidGenerationParams();
+    }
+  }
+
+  return {
+    ...(temperature === undefined ? {} : { temperature }),
+    ...(maxTokens === undefined ? {} : { max_tokens: maxTokens }),
+    ...(seed === undefined ? {} : { seed }),
+    ...(topP === undefined ? {} : { top_p: topP }),
+    ...(stop === undefined ? {} : { stop: stop as string | string[] }),
+  };
+}
+
+function hasSamplingParams(params: GenerationParams | undefined): boolean {
+  return params !== undefined &&
+    (params.seed !== undefined || params.top_p !== undefined || params.stop !== undefined);
+}
+
+/** APIs inspected against Pi 0.84.1 to prove an empty system prompt stays empty. */
+const NO_SYSTEM_PROMPT_SAFE_APIS = new Set([
+  "openai-completions",
+  "openai-responses",
+  "azure-openai-responses",
+]);
+
+/** Pi forwards arbitrary samplingParams only through these adapters. */
+const SAMPLING_PARAMS_APIS = NO_SYSTEM_PROMPT_SAFE_APIS;
+
+function validateGenerationApi(flags: Flags, resolved: ResolvedModel): void {
+  // The registry's `codex` name aliases Pi's openai-codex provider after
+  // resolution. Treat that reserved name as the Codex adapter even when a
+  // duplicate model id in Pi's catalogue would otherwise select another API.
+  const codexAdapter = resolved.providerName === "codex" || resolved.model.api === "openai-codex-responses";
+  if (flags.noSystemPrompt && (codexAdapter || !NO_SYSTEM_PROMPT_SAFE_APIS.has(resolved.model.api))) {
+    usageError("--no-system-prompt is unsupported for the selected model API");
+  }
+  if (hasSamplingParams(flags.genParams) && (codexAdapter || !SAMPLING_PARAMS_APIS.has(resolved.model.api))) {
+    usageError("--gen-params sampling fields are unsupported for the selected model API");
+  }
+}
+
+function generationStreamOptions(params: GenerationParams | undefined): {
+  temperature?: number;
+  maxTokens?: number;
+  samplingParams?: Record<string, unknown>;
+} {
+  if (params === undefined) return {};
+  const samplingParams = {
+    ...(params.seed === undefined ? {} : { seed: params.seed }),
+    ...(params.top_p === undefined ? {} : { top_p: params.top_p }),
+    ...(params.stop === undefined ? {} : { stop: params.stop }),
+  };
+  return {
+    ...(params.temperature === undefined ? {} : { temperature: params.temperature }),
+    ...(params.max_tokens === undefined ? {} : { maxTokens: params.max_tokens }),
+    ...(Object.keys(samplingParams).length === 0 ? {} : { samplingParams }),
+  };
 }
 
 /**
@@ -766,12 +916,16 @@ summon continues instead of failing. "off" disables this. The envelope is
 unchanged either way; the session JSONL records the compaction entry.
 
 Options:
+  --version                  Print the package version and exit
   --provider <name>          Provider enrolled in the registry (models.json)
   --model <id-or-tier>       Model id or tier: haiku | sonnet | opus
   --effort <level>           Thinking level: off|minimal|low|medium|high|xhigh|max
   --compaction <mode>        Compaction: off | auto (default: auto)
   --system-prompt <text>     System prompt
   --system-prompt-file <path>  System prompt from a file ("-" = stdin)
+  --no-system-prompt         Send no system prompt (not supported by every adapter)
+  --gen-params <JSON object> Inline generation parameters: temperature, max_tokens,
+                             seed, top_p, stop (bounded; no file/stdin syntax)
   --cwd <path>               Working directory (must exist; default: process cwd)
   --session-dir <path>       Session JSONL directory (default: ~/.local/share/miniharness/sessions)
   --resume <session-id>      Continue an existing JSONL session in place
@@ -804,7 +958,21 @@ async function resolveSystemPrompt(flags: Flags): Promise<string> {
   }
 }
 
+function hasVersionFlag(argv: string[]): boolean {
+  for (const arg of argv) {
+    if (arg === "--") return false;
+    if (arg === "--version") return true;
+  }
+  return false;
+}
+
 async function main(): Promise<void> {
+  // Version is intentionally handled before argv validation, lifecycle, config,
+  // session, model, credential, or provider work.
+  if (hasVersionFlag(process.argv.slice(2))) {
+    emit(`${PACKAGE_VERSION}\n`);
+    return;
+  }
   const startedAt = Date.now();
   const { flags, positionals } = parseArgv(process.argv.slice(2));
   lifecycle.setSilent(flags.silent);
@@ -852,6 +1020,8 @@ async function main(): Promise<void> {
   }
 
   // Provider/model/effort validation happens before any network or summon.
+  // Keep the established session/config ordering: a session-dir or resume
+  // failure retains precedence over model resolution.
   const session = openSession(flags);
   if (session.enabled && session.sessionDir !== undefined) {
     await assertSessionDirWritable(session.sessionDir);
@@ -861,6 +1031,9 @@ async function main(): Promise<void> {
       ? await openResumedSession(session.sessionDir, session.resume)
       : undefined;
   const resolved = resolveModel(flags);
+  // Generation API validation follows model resolution but still precedes
+  // credentials, MCP discovery, and all provider construction/contact.
+  validateGenerationApi(flags, resolved);
 
   // DEC-20260808-002: the credential store reads the operator's Claude
   // Code / Codex CLI OAuth logins and writes refreshed tokens back.
@@ -921,15 +1094,33 @@ async function main(): Promise<void> {
 
   const agent = new Agent({
     initialState: {
-      systemPrompt:
-        systemPrompt ||
-        "You are miniharness, a minimal headless assistant. Reply concisely and directly.",
+      systemPrompt: flags.noSystemPrompt
+        ? ""
+        : flags.systemPrompt !== undefined || flags.systemPromptFile !== undefined
+          ? systemPrompt
+          : "You are miniharness, a minimal headless assistant. Reply concisely and directly.",
       model: resolved.model,
       thinkingLevel: resolved.thinkingLevel,
       tools: remoteTools,
       messages: resumed?.initialMessages ?? [],
     },
-    streamFn: (m, ctx, opts) => models.streamSimple(m, ctx, opts),
+    // Invocation generation parameters belong only to the main agent loop.
+    // maybeCompact() below deliberately calls compact() without these options.
+    streamFn: (m, ctx, opts) => {
+      const invocationOptions = generationStreamOptions(flags.genParams);
+      return models.streamSimple(m, ctx, {
+        ...(opts ?? {}),
+        ...invocationOptions,
+        ...(opts?.samplingParams === undefined || invocationOptions.samplingParams === undefined
+          ? {}
+          : {
+              samplingParams: {
+                ...opts.samplingParams,
+                ...invocationOptions.samplingParams,
+              },
+            }),
+      });
+    },
   });
   const unsubscribeLifecycle = subscribeLifecycle(agent, resolved);
 

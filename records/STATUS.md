@@ -79,7 +79,8 @@ Nothing forked, nothing adopted beyond the two pinned libraries.
   DEC-20260808-001 surface: envelope with tokens/cost/duration/session_id,
   exit codes 0/1/2/3, full flag set (provider/model/effort incl. registry
   tiers, system-prompt via flag/file/stdin, cwd, session-dir, no-session,
-  config-dir, help), JSONL sessions on by default, adoption-join probe,
+  config-dir, help), early `--version`, explicit no-system-prompt invocation,
+  and bounded inline generation parameters, JSONL sessions on by default, adoption-join probe,
   registry custom providers (crofai et al. as OpenAI-compatible endpoints
   keyed from setup's auth store), and a fault-injection hook for the exit-1
   path. Compaction (SPEC core capability) is wired in: `--compaction
@@ -89,9 +90,10 @@ Nothing forked, nothing adopted beyond the two pinned libraries.
   The explicit MCP extension discovers tools before the model starts, requires
   every allowlisted name across the combined server set, rejects duplicates,
   permits plain HTTP only on loopback, and accepts no URL credentials. Suite:
-  92 tests, 86 pass, 0 fail, 6 live skips, 0 todo. Live-verified
-  on crofai (deepseek-v4-flash-0731): exit 0 envelope + session JSONL +
-  stage-key probe recovery.
+  100 tests, 94 pass, 0 fail, 6 live skips, 0 todo. Live-verified on crofai
+  (deepseek-v4-flash-0731) and on Grimoire with an explicit empty system prompt
+  plus seeded generation parameters; both returned the unchanged success
+  envelope.
 - Exit criteria: met pending heatmap cutover.
 - Dependencies: `@earendil-works/pi-agent-core`, `@earendil-works/pi-ai`;
   generated `models.json` from setup's registry.
@@ -118,6 +120,16 @@ Nothing forked, nothing adopted beyond the two pinned libraries.
 - Related ids: RSH-20260809-001, DEC-20260809-001.
 
 ## Recent Changes To Project Reality
+
+- Date: 2026-08-15
+  - Change: DEC-20260815-001 implemented `--version`, `--no-system-prompt`, and
+    the five-field bounded `--gen-params` object without changing the success,
+    lifecycle, or session schemas. The full suite passes 94 tests with 6
+    intentional live skips; a seeded Grimoire comparator smoke returned `OK`
+    and the model was unloaded afterward.
+  - Why it matters: sealed callers can use the globally installed Miniharness
+    invocation boundary without a parallel provider wrapper.
+  - Related ids: DEC-20260815-001.
 
 - Date: 2026-08-15
   - Change: 0.1.4 published to npmjs with explicit remote MCP attachment and

@@ -51,6 +51,10 @@ printf 'say hi' | node dist/cli.js
 Flags: `--provider <name>`, `--model <id-or-tier>` (`haiku`/`sonnet`/`opus`),
 `--effort <level>`, `--system-prompt <text>`, `--system-prompt-file <path>`
 (`-` = stdin; stdin serves either the prompt or the system prompt, not both),
+`--no-system-prompt` (send no system prompt; Miniharness fails closed for Pi
+adapters that inject their own instruction when the prompt is empty),
+`--gen-params '<inline JSON object>'` (supported fields only:
+`temperature`, `max_tokens`, `seed`, `top_p`, and `stop`),
 `--cwd <path>` (must exist and be a directory), `--session-dir <path>`,
 `--resume <session-id>`, `--purpose <identifier>`, repeatable
 `--mcp-server <label>=<url>`, repeatable `--mcp-tool <name>`, `--no-session`,
@@ -60,6 +64,18 @@ history and records the compaction entry in the session JSONL; the envelope is
 unchanged), `--config-dir <path>` (override for the directory holding
 `models.json`; default is `PI_CODING_AGENT_DIR` or `~/.pi/agent/`), `--silent`
 (suppress lifecycle/progress events; failures remain), and `--help`.
+
+`--version` prints the package version and exits before reading config or
+opening a session. `--no-system-prompt` is mutually exclusive with the two
+supplied system-prompt forms. `--gen-params` is one inline JSON object (not a
+file, stdin, or `@` reference), capped at 16 KiB UTF-8. Its numbers must be
+finite and in their API-defined ranges: `temperature >= 0`, positive safe
+integer `max_tokens`, non-negative safe integer `seed`, and `0 < top_p <= 1`.
+`stop` may be one string up to 256 UTF-8 bytes or up to 16 strings (2 KiB total,
+each at most 256 bytes). `seed`, `top_p`, and `stop` require a resolved Pi API
+that forwards sampling parameters (`openai-completions`, `openai-responses`, or
+`azure-openai-responses`). These options affect only the current invocation;
+they are not persisted or inherited by `--resume`.
 
 Sessions are saved as Pi JSONL files by default. Pass `--resume <session-id>`
 with the same session directory to continue an existing conversation. The

@@ -11,7 +11,7 @@ Keep it durable. Do not use it as a changelog, inbox, or weekly narrative.
 - Operator: LPFchan
 - Last updated: 2026-08-14
 - Related decisions: DEC-20260808-001, DEC-20260808-002,
-  DEC-20260809-001, DEC-20260814-001
+  DEC-20260809-001, DEC-20260814-001, DEC-20260815-001
 - Origin research: heatmap `records/research/RSH-20260808-001-miniharness-opencode-replacement.md`
 
 ## Project Thesis
@@ -102,7 +102,12 @@ record is canonical. Summary:
 - **Exit codes**: 0 success / 1 summon failed in flight / 2 bad invocation /
   3 harness internal. stdout empty unless 0.
 - **Input**: prompt positional or via stdin; `--system-prompt` /
-  `--system-prompt-file` (first-class, replacing heatmap's prompt-gluing);
+  `--system-prompt-file` (first-class, replacing heatmap's prompt-gluing), or
+  `--no-system-prompt` for a proven user-only adapter; bounded inline
+  `--gen-params` accepts only `temperature`, `max_tokens`, non-negative `seed`,
+  `top_p`, and `stop`, failing closed when the selected adapter cannot forward
+  sampling parameters; `--version` reports the package semantic version without
+  opening config, sessions, lifecycle, or providers;
   `--provider` / `--model` / `--effort` selection resolved through setup's
   registry and the generated `thinkingLevelMap`; cwd defaults to the process
   cwd with a `--cwd` override. `--purpose <identifier>` stores a bounded caller
