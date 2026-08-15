@@ -122,11 +122,14 @@ Nothing forked, nothing adopted beyond the two pinned libraries.
 ## Recent Changes To Project Reality
 
 - Date: 2026-08-15
-  - Change: DEC-20260815-001 implemented `--version`, `--no-system-prompt`, and
-    the five-field bounded `--gen-params` object without changing the success,
-    lifecycle, or session schemas. The full suite passes 94 tests with 6
-    intentional live skips; a seeded Grimoire comparator smoke returned `OK`
-    and the model was unloaded afterward.
+  - Change: 0.1.5 published to npmjs with `--version`,
+    `--no-system-prompt`, and the five-field bounded `--gen-params` object,
+    without changing the success, lifecycle, or session schemas. The registry
+    reports shasum `ee77f8c74362b2064a48c9fe3925d81d6c01e93d`; the full
+    prepublish suite passed 94 tests with 6 intentional live skips. The global
+    installation at `/home/yeowool/.nvm/versions/node/v22.23.1/bin/miniharness`
+    reports 0.1.5. A seeded Grimoire comparator smoke returned `OK`, and the
+    model was unloaded afterward.
   - Why it matters: sealed callers can use the globally installed Miniharness
     invocation boundary without a parallel provider wrapper.
   - Related ids: DEC-20260815-001.
