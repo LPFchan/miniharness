@@ -41,6 +41,7 @@ import {
   resolveConfig,
   resolveConfigDir,
 } from "./config.js";
+import { omitUndefinedObjectFields } from "./durable.js";
 import { discoverRemoteMcpTools, mergeRemoteMcpTools, RemoteMcpError } from "./mcp.js";
 
 /** Fixed by DEC-20260808-001: every field except `output` may be null. */
@@ -401,7 +402,7 @@ async function writeSession(
   });
   const metadata = await session.getMetadata();
   for (const message of messages) {
-    await session.appendMessage(message);
+    await session.appendMessage(omitUndefinedObjectFields(message));
   }
   if (compactionEntry !== undefined) {
     await session.appendEntry(compactionEntry, "main");
@@ -419,7 +420,7 @@ async function appendSession(
 ): Promise<void> {
   try {
     for (const message of messages) {
-      await open.session.appendMessage(message);
+      await open.session.appendMessage(omitUndefinedObjectFields(message));
     }
     if (compactionEntry !== undefined) {
       await open.session.appendEntry(compactionEntry, "main");
