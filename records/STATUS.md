@@ -6,10 +6,10 @@ Do not use it as a transcript or a scratchpad.
 
 ## Snapshot
 
-- Last updated: 2026-08-15
+- Last updated: 2026-08-17
 - Overall posture: `active`
-- Current focus: the live-verified remote MCP and persisted-session path is
-  published in npm release 0.1.7 for Heatmap chat.
+- Current focus: npm release 0.1.8 is installed in production with the
+  Cloudflare post-tool response path live-verified through Heatmap chat.
 - Highest-priority blocker: none.
 - Next operator decision needed: none in this repo.
 - Related decisions: DEC-20260808-001 (CLI summon contract), DEC-20260808-002
@@ -34,8 +34,11 @@ turn to the same JSONL file, and preserves its session id; unsafe or missing
 ids fail as bad invocations. Release 0.1.7 carries explicit remote Streamable
 HTTP MCP servers, complete unique tool allowlists, safe endpoint validation,
 durable `--purpose` metadata, repeatable MCP CLI flags, and JSON-safe persisted
-provider messages. The packaged global binary completed and resumed a real
-Cloudflare Gemma conversation through Heatmap's eight-tool allowlist.
+provider messages. Release 0.1.8 reads Cloudflare OpenAI-compatible calls as
+completed responses and adapts them into Pi's event stream, preventing the
+post-tool SSE stall without changing the Miniharness envelope or other
+providers. The packaged global binary completed a real Cloudflare Gemma cost
+query through Heatmap's eight-tool allowlist.
 Nothing forked, nothing adopted beyond the two pinned libraries.
 
 ## Active Phases Or Tracks
@@ -90,7 +93,7 @@ Nothing forked, nothing adopted beyond the two pinned libraries.
   The explicit MCP extension discovers tools before the model starts, requires
   every allowlisted name across the combined server set, rejects duplicates,
   permits plain HTTP only on loopback, and accepts no URL credentials. Suite:
-  100 tests, 94 pass, 0 fail, 6 live skips, 0 todo. Live-verified on crofai
+  106 tests, 100 pass, 0 fail, 6 live skips, 0 todo. Live-verified on crofai
   (deepseek-v4-flash-0731) and on Grimoire with an explicit empty system prompt
   plus seeded generation parameters; both returned the unchanged success
   envelope.
@@ -120,6 +123,16 @@ Nothing forked, nothing adopted beyond the two pinned libraries.
 - Related ids: RSH-20260809-001, DEC-20260809-001.
 
 ## Recent Changes To Project Reality
+
+- Date: 2026-08-17
+  - Change: 0.1.8 published to npmjs with shasum
+    `3b3f51d783460729d35bb4f8aa989cede607a5c3`, installed globally, and loaded
+    by the restarted Heatmap service. The public chat endpoint completed the
+    previously failing Korean provider-cost query through `query_cost` and
+    returned its answer plus a persisted session id in about 65 seconds.
+  - Why it matters: Cloudflare's stalled post-tool SSE response no longer
+    prevents Heatmap from receiving Miniharness's completed answer.
+  - Related ids: LOG-20260817-013045-root, LOG-20260817-013132-root.
 
 - Date: 2026-08-15
   - Change: 0.1.7 published to npmjs with shasum
