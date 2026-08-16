@@ -45,6 +45,8 @@ week scope. The harness replaces `opencode run` in that path
   the operator's existing Claude Code / Codex CLI logins, with refresh
   write-back to the CLI files (DEC-20260808-002).
 - Resilient retry (408/409/429/5xx, honour `retry-after`).
+- Cloudflare OpenAI-compatible calls use completed HTTP responses adapted into
+  Pi's event stream; all other providers keep their native streaming path.
 - Explicit remote Streamable HTTP MCP client attachment with a complete tool
   allowlist, but **no MCP server and no sub-agents by default**; capabilities
   are present only when the caller supplies `--mcp-server` and `--mcp-tool`.

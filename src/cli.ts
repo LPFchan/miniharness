@@ -43,6 +43,7 @@ import {
 } from "./config.js";
 import { omitUndefinedObjectFields } from "./durable.js";
 import { discoverRemoteMcpTools, mergeRemoteMcpTools, RemoteMcpError } from "./mcp.js";
+import { cloudflareCompletedResponseFetch } from "./cloudflare.js";
 
 /** Fixed by DEC-20260808-001: every field except `output` may be null. */
 interface Envelope {
@@ -1113,6 +1114,9 @@ async function main(): Promise<void> {
       return models.streamSimple(m, ctx, {
         ...(opts ?? {}),
         ...invocationOptions,
+        ...(resolved.providerName === "cloudflare"
+          ? { fetch: cloudflareCompletedResponseFetch(opts?.fetch) }
+          : {}),
         ...(opts?.samplingParams === undefined || invocationOptions.samplingParams === undefined
           ? {}
           : {

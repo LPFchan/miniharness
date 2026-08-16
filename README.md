@@ -128,6 +128,10 @@ registry providers Pi does not ship (crofai, grimoire, kimicode, …) are
 registered as OpenAI-compatible endpoints whose keys resolve from the
 operator's auth store (`~/.local/share/opencode/auth.json`, the same seam
 setup writes for opencode auth; `MINIHARNESS_AUTH_FILE` overrides for tests).
+Cloudflare's OpenAI-compatible endpoint is read as a completed response and
+adapted into Pi's event stream. This avoids stalled post-tool SSE responses
+without changing Miniharness's stdout envelope or the behavior of other
+providers.
 The `anthropic` and `codex` providers can instead run on the operator's
 existing CLI subscription logins (DEC-20260808-002): when
 `~/.claude/.credentials.json` or `~/.codex/auth.json` holds OAuth tokens,
