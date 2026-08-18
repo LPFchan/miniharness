@@ -48,8 +48,8 @@ Do not put raw brainstorms or untriaged intake here.
 - Outcome: every summon emits a small versioned NDJSON lifecycle stream on
   stderr by default; `--silent` restores empty success stderr without hiding
   failures.
-- Status: implemented; see SPEC/STATUS. Remaining work is heatmap consumption
-  and optional upstream retry callbacks.
+- Status: implemented and consumed by Heatmap; see SPEC/STATUS. Remaining
+  optional work is upstream retry callbacks.
 - Why this is accepted: DEC-20260809-001. Heatmap needs per-worker phase and
   last-activity state before its 600-second deadline, and Pi's existing agent
   events provide most of the signal without expanding miniharness into a

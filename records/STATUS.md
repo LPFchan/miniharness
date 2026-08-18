@@ -6,15 +6,16 @@ Do not use it as a transcript or a scratchpad.
 
 ## Snapshot
 
-- Last updated: 2026-08-17
+- Last updated: 2026-08-18
 - Overall posture: `active`
-- Current focus: npm release 0.1.8 is installed in production with the
-  Cloudflare post-tool response path live-verified through Heatmap chat.
+- Current focus: npm release 0.1.9 is installed in production and its early
+  session identity is live-verified through Heatmap chat.
 - Highest-priority blocker: none.
 - Next operator decision needed: none in this repo.
 - Related decisions: DEC-20260808-001 (CLI summon contract), DEC-20260808-002
   (CLI OAuth credential reuse), DEC-20260809-001 (default lifecycle events),
-  DEC-20260814-001 (persisted-session resumption)
+  DEC-20260814-001 (persisted-session resumption), DEC-20260818-001
+  (sessions start before inference)
 - Origin research: heatmap `records/research/RSH-20260808-001-miniharness-opencode-replacement.md`
 
 ## Current State Summary
@@ -29,7 +30,9 @@ one JSON envelope out, meaningful exit codes, registry-driven
 provider/model/effort resolution including custom OpenAI-compatible
 providers. Summons now project Pi agent events into versioned, content-free
 lifecycle NDJSON on stderr by default; `--silent` suppresses non-failure
-records. `--resume` reconstructs an existing Pi conversation, appends one new
+records. Version 0.1.9 creates or opens the session before provider setup,
+announces its id as `session_started`, and expands `{session_id}` in a
+supplied system prompt before inference. `--resume` reconstructs an existing Pi conversation, appends one new
 turn to the same JSONL file, and preserves its session id; unsafe or missing
 ids fail as bad invocations. Release 0.1.7 carries explicit remote Streamable
 HTTP MCP servers, complete unique tool allowlists, safe endpoint validation,
@@ -93,7 +96,7 @@ Nothing forked, nothing adopted beyond the two pinned libraries.
   The explicit MCP extension discovers tools before the model starts, requires
   every allowlisted name across the combined server set, rejects duplicates,
   permits plain HTTP only on loopback, and accepts no URL credentials. Suite:
-  106 tests, 100 pass, 0 fail, 6 live skips, 0 todo. Live-verified on crofai
+  109 tests, 103 pass, 0 fail, 6 live skips, 0 todo. Live-verified on crofai
   (deepseek-v4-flash-0731) and on Grimoire with an explicit empty system prompt
   plus seeded generation parameters; both returned the unchanged success
   envelope.
@@ -123,6 +126,19 @@ Nothing forked, nothing adopted beyond the two pinned libraries.
 - Related ids: RSH-20260809-001, DEC-20260809-001.
 
 ## Recent Changes To Project Reality
+
+- Date: 2026-08-18
+  - Change: version 0.1.9 starts durable sessions before inference, reports
+    their ids through lifecycle stderr, and fills `{session_id}` in supplied
+    system prompts. npmjs published it with shasum
+    `f8b3d68098ff7e15049fcc2c16b91f378bc42d96`, and that registry artifact is
+    installed globally from pushed commit `e816356`.
+    A real Cloudflare Gemma summon announced
+    `01a01344-19bb-7445-9a07-d0e841d7800a` before inference and returned that
+    exact value from the filled prompt. All 109 prepublish tests passed.
+  - Why it matters: callers can correlate, resume, and identify a conversation
+    from request start, including a failed or idle first turn.
+  - Related ids: DEC-20260818-001, LOG-20260818-140451-codex.
 
 - Date: 2026-08-17
   - Change: 0.1.8 published to npmjs with shasum
