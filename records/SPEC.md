@@ -116,7 +116,11 @@ record is canonical. Summary:
   marker in session metadata without changing the prompt.
 - **Sessions**: JSONL at `~/.local/share/miniharness/sessions/` by default,
   on by default (heatmap's adoption join reads them), `--no-session` opts
-  out, `--session-dir` overrides. `--resume <session-id>` reconstructs an
+  out, `--session-dir` overrides. A new session is created before provider
+  setup and announced as `session_started` on the lifecycle stream, so failed
+  first turns retain a stable header and id. A supplied system prompt may use
+  `{session_id}`, which resolves to that opened id before inference and is
+  invalid with `--no-session`. `--resume <session-id>` reconstructs an
   existing Pi conversation from that directory, appends one new turn to the
   same JSONL file, and returns the same id; unknown or unsafe ids are usage
   errors, and resumption cannot be combined with `--no-session`.

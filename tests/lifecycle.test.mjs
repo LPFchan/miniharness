@@ -170,6 +170,10 @@ test('purpose marker is stored in the JSONL header without changing the prompt',
   assert.equal(status, 0, `purpose summon failed: ${stderr}`);
   const envelope = JSON.parse(stdout);
   assert.ok(envelope.session_id);
+  const lifecycle = parseLifecycle(stderr);
+  const started = lifecycle.find((record) => record.event === 'session_started');
+  assert.equal(started?.session_id, envelope.session_id);
+  assert.equal(started?.resumed, false);
   const session = readdirSync(sessionDir, { recursive: true })
     .filter((file) => file.endsWith('.jsonl'))
     .map((file) => join(sessionDir, file))
@@ -178,4 +182,32 @@ test('purpose marker is stored in the JSONL header without changing the prompt',
   const header = JSON.parse(readFileSync(session, 'utf8').split('\n')[0]);
   assert.equal(header.metadata.purpose, 'chat_sidebar');
   assert.ok(!readFileSync(session, 'utf8').includes('purpose: chat_sidebar'));
+});
+
+test('new session id is durable and reported before provider inference', () => {
+  const sessionDir = mkdtempSync(join(tmpdir(), 'miniharness-early-session-'));
+  const { status, stdout, stderr } = runHarness([
+    '--config-dir', fixtureConfigDir(),
+    '--provider', 'stub',
+    '--model', STUB_MODEL,
+    '--session-dir', sessionDir,
+    'question that will fail before inference',
+  ], { env: { MINIHARNESS_FAIL_AFTER: 'provider-connect' } });
+  assert.equal(status, 1);
+  assert.equal(stdout, '');
+  const records = parseLifecycle(stderr);
+  assert.deepEqual(records.map((record) => record.event), [
+    'started',
+    'session_started',
+    'failed',
+  ]);
+  const sessionId = records[1].session_id;
+  assert.equal(typeof sessionId, 'string');
+  const files = readdirSync(sessionDir, { recursive: true })
+    .filter((file) => file.endsWith('.jsonl'))
+    .map((file) => join(sessionDir, file));
+  assert.equal(files.length, 1);
+  const lines = readFileSync(files[0], 'utf8').trim().split('\n');
+  assert.equal(lines.length, 1, 'failed inference leaves the durable session header');
+  assert.equal(JSON.parse(lines[0]).id, sessionId);
 });

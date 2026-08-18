@@ -119,6 +119,35 @@ test('system prompt has default, supplied, and explicitly absent states', () => 
   assert.equal(captured(absentRun.capture).context.systemPrompt, '');
 });
 
+test('{session_id} in the system prompt resolves before provider inference', () => {
+  const capture = capturePath();
+  const config = fixtureConfig();
+  const sessionDir = mkdtempSync(join(tmpdir(), 'miniharness-prompt-session-'));
+  const result = runHarness([
+    '--config-dir', config,
+    '--provider', 'stub',
+    '--model', STUB_MODEL,
+    '--session-dir', sessionDir,
+    '--system-prompt', 'current session: {session_id}',
+    'hello',
+  ], { env: stubEnv(capture) });
+  assert.equal(result.status, 0, result.stderr);
+  const records = lifecycle(result.stderr);
+  const sessionId = records.find((record) => record.event === 'session_started')?.session_id;
+  assert.equal(typeof sessionId, 'string');
+  assert.equal(captured(capture).context.systemPrompt, `current session: ${sessionId}`);
+});
+
+test('{session_id} requires sessions to be enabled', () => {
+  const result = runStub([
+    '--system-prompt', 'current session: {session_id}',
+    'hello',
+  ]);
+  assert.equal(result.status, 2);
+  assert.equal(result.stdout, '');
+  assert.match(result.stderr, /requires session persistence/);
+});
+
 test('--no-system-prompt is mutually exclusive with supplied prompt forms', () => {
   const config = fixtureConfig();
   const file = join(config, 'prompt.txt');

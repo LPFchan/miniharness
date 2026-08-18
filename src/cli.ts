@@ -151,6 +151,7 @@ interface Flags {
 
 type LifecycleEventName =
   | "started"
+  | "session_started"
   | "request_started"
   | "response_started"
   | "streaming_started"
@@ -317,6 +318,15 @@ function openSession(flags: Flags): SessionConfig {
 }
 
 const SAFE_SESSION_ID = /^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/;
+const SESSION_ID_TEMPLATE = "{session_id}";
+
+function fillSessionIdTemplate(systemPrompt: string, sessionId: string | undefined): string {
+  if (!systemPrompt.includes(SESSION_ID_TEMPLATE)) return systemPrompt;
+  if (sessionId === undefined) {
+    usageError("{session_id} in the system prompt requires session persistence");
+  }
+  return systemPrompt.replaceAll(SESSION_ID_TEMPLATE, sessionId);
+}
 
 /**
  * Open an existing Pi JSONL session through the library. The repository is
@@ -350,6 +360,28 @@ async function openResumedSession(dir: string, id: string): Promise<OpenSession>
     if (error instanceof ExitSignal) throw error;
     const detail = error instanceof Error ? error.message : String(error);
     usageError(`cannot resume session ${id}: ${detail}`);
+  }
+}
+
+/** Create the durable session header before provider setup or inference. */
+async function createSession(
+  dir: string,
+  purpose: string | undefined,
+): Promise<OpenSession> {
+  const fs = new NodeExecutionEnv({ cwd: process.cwd() });
+  try {
+    const repo = new JsonlSessionRepo({ fs, sessionsRoot: dir });
+    const session = await repo.create({
+      cwd: process.cwd(),
+      ...(purpose === undefined ? {} : { metadata: { purpose } }),
+    });
+    const metadata = await session.getMetadata();
+    return { fs, session, id: metadata.id, initialMessages: [] };
+  } catch (error) {
+    await fs.cleanup();
+    if (error instanceof ExitSignal) throw error;
+    const detail = error instanceof Error ? error.message : String(error);
+    internalError(`session creation failed: ${detail}`);
   }
 }
 
@@ -389,30 +421,6 @@ async function assertSessionDirWritable(dir: string): Promise<void> {
  * so the caller exits DEC code 3 - session writes are harness-owned, not
  * summon failures.
  */
-async function writeSession(
-  messages: AgentMessage[],
-  dir: string,
-  purpose: string | undefined,
-  compactionEntry?: CompactionEntry,
-): Promise<string> {
-  const fs = new NodeExecutionEnv({ cwd: process.cwd() });
-  const repo = new JsonlSessionRepo({ fs, sessionsRoot: dir });
-  const session: Session = await repo.create({
-    cwd: process.cwd(),
-    ...(purpose === undefined ? {} : { metadata: { purpose } }),
-  });
-  const metadata = await session.getMetadata();
-  for (const message of messages) {
-    await session.appendMessage(omitUndefinedObjectFields(message));
-  }
-  if (compactionEntry !== undefined) {
-    await session.appendEntry(compactionEntry, "main");
-  }
-  await session.getLog();
-  await fs.cleanup();
-  return metadata.id;
-}
-
 /** Append only the new turn to an already-open session. */
 async function appendSession(
   open: OpenSession,
@@ -1029,10 +1037,18 @@ async function main(): Promise<void> {
   if (session.enabled && session.sessionDir !== undefined) {
     await assertSessionDirWritable(session.sessionDir);
   }
-  const resumed =
-    session.enabled && session.sessionDir !== undefined && session.resume !== undefined
+  const opened = session.enabled && session.sessionDir !== undefined
+    ? session.resume !== undefined
       ? await openResumedSession(session.sessionDir, session.resume)
-      : undefined;
+      : await createSession(session.sessionDir, session.purpose)
+    : undefined;
+  if (opened !== undefined) {
+    lifecycle.emit("session_started", {
+      session_id: opened.id,
+      resumed: session.resume !== undefined,
+    });
+  }
+  const effectiveSystemPrompt = fillSessionIdTemplate(systemPrompt, opened?.id);
   const resolved = resolveModel(flags);
   // Generation API validation follows model resolution but still precedes
   // credentials, MCP discovery, and all provider construction/contact.
@@ -1100,12 +1116,12 @@ async function main(): Promise<void> {
       systemPrompt: flags.noSystemPrompt
         ? ""
         : flags.systemPrompt !== undefined || flags.systemPromptFile !== undefined
-          ? systemPrompt
+          ? effectiveSystemPrompt
           : "You are miniharness, a minimal headless assistant. Reply concisely and directly.",
       model: resolved.model,
       thinkingLevel: resolved.thinkingLevel,
       tools: remoteTools,
-      messages: resumed?.initialMessages ?? [],
+      messages: opened?.initialMessages ?? [],
     },
     // Invocation generation parameters belong only to the main agent loop.
     // maybeCompact() below deliberately calls compact() without these options.
@@ -1170,19 +1186,14 @@ async function main(): Promise<void> {
     finalizationWarning = `compaction skipped: ${compactionOutcome.error}`;
   }
 
-  let sessionId: string | null = null;
-  if (session.enabled && session.sessionDir !== undefined) {
+  let sessionId: string | null = opened?.id ?? null;
+  if (opened !== undefined) {
     try {
-      if (resumed !== undefined) {
-        const appended = messages.slice(resumed.initialMessages.length);
-        await appendSession(resumed, appended, compactionEntry);
-        sessionId = resumed.id;
-      } else {
-        sessionId = await writeSession(messages, session.sessionDir, session.purpose, compactionEntry);
-      }
+      const appended = messages.slice(opened.initialMessages.length);
+      await appendSession(opened, appended, compactionEntry);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
-      if (resumed !== undefined) await resumed.fs.cleanup();
+      await opened.fs.cleanup();
       internalError(`session write failed: ${detail}`);
     }
   }

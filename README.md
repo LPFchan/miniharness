@@ -83,6 +83,10 @@ session is opened and its existing branch is reconstructed by Pi, then the
 new user/assistant turn is appended to that same file; the success envelope
 reports the same `session_id`. Resuming an unknown, malformed, or unsafe id is
 a usage error (exit 2). `--resume` cannot be combined with `--no-session`.
+New sessions are created before provider setup and reported immediately as a
+`session_started` lifecycle event. A supplied system prompt may contain
+`{session_id}`; Miniharness replaces it with the opened id before inference.
+The token requires session persistence.
 
 ### Remote MCP tools
 
