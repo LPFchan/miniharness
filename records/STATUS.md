@@ -8,8 +8,8 @@ Do not use it as a transcript or a scratchpad.
 
 - Last updated: 2026-08-19
 - Overall posture: `active`
-- Current focus: npm release 0.1.10 is prepared locally; the 0.1.9 release and
-  its early session identity remain live-verified through Heatmap chat.
+- Current focus: npm release 0.1.10 is published and installed globally with
+  compaction lifecycle events available to callers.
 - Highest-priority blocker: none.
 - Next operator decision needed: none in this repo.
 - Related decisions: DEC-20260808-001 (CLI summon contract), DEC-20260808-002
@@ -30,8 +30,8 @@ one JSON envelope out, meaningful exit codes, registry-driven
 provider/model/effort resolution including custom OpenAI-compatible
 providers. Summons now project Pi agent events into versioned, content-free
 lifecycle NDJSON on stderr by default; `--silent` suppresses non-failure
-records. Prepared version 0.1.10 adds a content-free compaction pair around
-the actual compaction model call. Version 0.1.9 creates or opens the session
+records. Release 0.1.10 adds a content-free compaction pair around the actual
+compaction model call. Version 0.1.9 creates or opens the session
 before provider setup, announces its id as `session_started`, and expands
 `{session_id}` in a supplied system prompt before inference. `--resume`
 reconstructs an existing Pi conversation, appends one new turn to the same
@@ -129,6 +129,17 @@ Nothing forked, nothing adopted beyond the two pinned libraries.
 - Related ids: RSH-20260809-001, DEC-20260809-001.
 
 ## Recent Changes To Project Reality
+
+- Date: 2026-08-19
+  - Change: version 0.1.10 adds `compaction_started` and
+    `compaction_finished` around the actual compaction model call, with only a
+    content-free completion outcome. npmjs published it with shasum
+    `e531b938475faeb998bc6dc4e37d405457d1798d`; that registry artifact is
+    installed globally from pushed commit `8ca3456`. The installed `cli.js`
+    checksum matches the release build, and all 111 prepublish tests passed.
+  - Why it matters: callers can label a compaction pause truthfully without
+    inspecting transcript contents or guessing from elapsed finalization time.
+  - Related ids: DEC-20260819-001, LOG-20260819-004212-root.
 
 - Date: 2026-08-18
   - Change: version 0.1.9 starts durable sessions before inference, reports
