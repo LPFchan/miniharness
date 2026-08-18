@@ -34,7 +34,7 @@ function fixtureConfigDir() {
             {
               id: STUB_MODEL,
               name: 'stub overflow model',
-              contextWindow: 4096,
+              contextWindow: 32768,
               maxTokens: 128,
               reasoning: false,
             },

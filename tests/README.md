@@ -1,7 +1,8 @@
 # Conformance tests
 
 This suite asserts the miniharness invocation contracts fixed in
-DEC-20260808-001 and DEC-20260809-001 against **any** `miniharness` binary:
+DEC-20260808-001, DEC-20260809-001, and DEC-20260819-001 against **any**
+`miniharness` binary:
 argv/stdin in, one JSON envelope on stdout, lifecycle NDJSON on stderr, and
 exit codes 0–3. The binary is spawned from `MINIHARNESS_BIN`.
 
@@ -30,6 +31,7 @@ skip.
 | Test | DEC bullet asserted |
 | --- | --- |
 | default stub success | One stdout envelope; ordered/versioned lifecycle stderr; content-free progress; `done` terminal record |
+| overflowing compaction | `finalizing`, content-free compaction start/finish with outcome, then `done`; `--compaction off` emits neither compaction event |
 | `--silent` stub success | One stdout envelope; empty success stderr |
 | failure under `--silent` | Empty stdout; structured `failed` stderr remains visible |
 | unknown flag → exit 2 | Exit code 2; empty stdout; structured usage failure |

@@ -120,9 +120,12 @@ On success it prints one JSON envelope to stdout (see
 `records/decisions/DEC-20260808-001-cli-summon-contract.md` for the contract);
 stderr emits versioned lifecycle NDJSON by default (DEC-20260809-001):
 `started`, request/response/streaming transitions, content-free coalesced
-`progress`, tool transitions, `finalizing`, then `done`. Every record carries
-`protocol`, `version`, `seq`, `timestamp`, and `elapsed_ms`. `--silent`
-restores empty stderr on success; structured `failed` records remain visible.
+`progress`, tool transitions, `finalizing`, `compaction_started`,
+`compaction_finished` (with only `outcome: completed|failed`), then `done`.
+The compaction pair appears only around an actual compaction model call. Every
+record carries `protocol`, `version`, `seq`, `timestamp`, and `elapsed_ms`.
+`--silent` restores empty stderr on success; structured `failed` records remain
+visible.
 Callers should drain stderr concurrently and must not expect prompt, response,
 reasoning, tool payload, credential, or provider-header content there.
 

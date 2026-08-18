@@ -114,6 +114,21 @@ function runHarness(args, { input, cwd = REPO_ROOT, env } = {}) {
   return { status: res.status, stdout: res.stdout ?? '', stderr: res.stderr ?? '' };
 }
 
+/** Parse miniharness-authored lifecycle stderr. */
+function parseLifecycle(stderr) {
+  return stderr
+    .trim()
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => {
+      try {
+        return JSON.parse(line);
+      } catch (error) {
+        assert.fail(`stderr line is not lifecycle JSON: ${error.message}\n${line}`);
+      }
+    });
+}
+
 /** A fresh temp session dir for one summon. */
 function freshSessionDir() {
   return mkdtempSync(join(tmpdir(), 'miniharness-compaction-session-'));
@@ -170,6 +185,26 @@ test('--compaction auto compacts an overflowing transcript and persists the comp
   const envelope = JSON.parse(stdout);
   assert.equal(envelope.output, 'stub reply');
   assert.ok(envelope.session_id, 'session id must be present');
+
+  const lifecycle = parseLifecycle(stderr);
+  const finalizing = lifecycle.findIndex((record) => record.event === 'finalizing');
+  const compactionStarted = lifecycle.findIndex((record) => record.event === 'compaction_started');
+  const compactionFinished = lifecycle.findIndex((record) => record.event === 'compaction_finished');
+  const done = lifecycle.findIndex((record) => record.event === 'done');
+  assert.ok(finalizing >= 0, 'finalizing lifecycle record must be present');
+  assert.equal(compactionStarted, finalizing + 1);
+  assert.equal(compactionFinished, compactionStarted + 1);
+  assert.equal(done, compactionFinished + 1);
+  assert.deepEqual(
+    Object.keys(lifecycle[compactionStarted]).sort(),
+    ['elapsed_ms', 'event', 'protocol', 'seq', 'timestamp', 'version'],
+  );
+  assert.deepEqual(
+    Object.keys(lifecycle[compactionFinished]).sort(),
+    ['elapsed_ms', 'event', 'outcome', 'protocol', 'seq', 'timestamp', 'version'],
+  );
+  assert.equal(lifecycle[compactionFinished].outcome, 'completed');
+
   // The envelope keeps the DEC shape: no compaction field.
   assert.equal('compacted' in envelope, false);
 
@@ -197,9 +232,68 @@ test('--compaction off skips compaction even on overflow', () => {
   const envelope = JSON.parse(stdout);
   assert.equal(envelope.output, 'stub reply');
 
+  const lifecycle = parseLifecycle(stderr);
+  assert.equal(lifecycle.some((record) => record.event === 'compaction_started'), false);
+  assert.equal(lifecycle.some((record) => record.event === 'compaction_finished'), false);
+
   const lines = readSessionLines(sessionDir);
   const entry = lines.find((item) => item.type === 'compaction');
   assert.equal(entry, undefined, 'session must not contain a compaction entry');
+});
+
+test('--silent suppresses compaction lifecycle records on overflow', () => {
+  const sessionDir = freshSessionDir();
+  const { status, stdout, stderr } = runHarness(
+    [
+      '--config-dir', fixtureDir,
+      '--provider', 'stub',
+      '--model', STUB_MODEL,
+      '--compaction', 'auto',
+      '--silent',
+      LONG_PROMPT,
+    ],
+    { env: { ...process.env, MINIHARNESS_SESSION_DIR: sessionDir } },
+  );
+  assert.equal(status, 0, `summon must succeed (got ${status}); stderr: ${stderr}`);
+  assert.equal(JSON.parse(stdout).output, 'stub reply');
+  assert.equal(stderr, '');
+});
+
+test('failed compaction emits a paired content-free failure outcome', () => {
+  const sessionDir = freshSessionDir();
+  const { status, stdout, stderr } = runHarness(
+    [
+      '--config-dir', fixtureDir,
+      '--provider', 'stub',
+      '--model', STUB_MODEL,
+      '--compaction', 'auto',
+      LONG_PROMPT,
+    ],
+    {
+      env: {
+        ...process.env,
+        MINIHARNESS_SESSION_DIR: sessionDir,
+        MINIHARNESS_COMPACTION_FAILURE: 'returned',
+      },
+    },
+  );
+  assert.equal(status, 0, `summon must keep its existing success status (got ${status}); stderr: ${stderr}`);
+  assert.equal(JSON.parse(stdout).output, 'stub reply');
+
+  const lifecycle = parseLifecycle(stderr);
+  const finalizing = lifecycle.findIndex((record) => record.event === 'finalizing');
+  const compactionStarted = lifecycle.findIndex((record) => record.event === 'compaction_started');
+  const compactionFinished = lifecycle.findIndex((record) => record.event === 'compaction_finished');
+  const done = lifecycle.findIndex((record) => record.event === 'done');
+  assert.ok(finalizing >= 0, 'finalizing lifecycle record must be present');
+  assert.equal(compactionStarted, finalizing + 1);
+  assert.equal(compactionFinished, compactionStarted + 1);
+  assert.equal(done, compactionFinished + 1);
+  assert.deepEqual(
+    Object.keys(lifecycle[compactionFinished]).sort(),
+    ['elapsed_ms', 'event', 'outcome', 'protocol', 'seq', 'timestamp', 'version'],
+  );
+  assert.equal(lifecycle[compactionFinished].outcome, 'failed');
 });
 
 test('--resume appends a correction turn to the existing session and keeps its id', () => {

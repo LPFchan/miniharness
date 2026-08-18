@@ -9,6 +9,8 @@ import { createAssistantMessageEventStream, createProvider } from '@earendil-wor
 
 export const STUB_MODEL = 'stub-overflow-1';
 
+let streamSimpleCalls = 0;
+
 function usage(extra = {}) {
   return {
     input: 40,
@@ -48,6 +50,7 @@ export function registerTestProvider(models) {
       api: {
         'openai-completions': {
           streamSimple: () => {
+            streamSimpleCalls++;
             const stream = createAssistantMessageEventStream();
             const base = {
               role: 'assistant',
@@ -58,6 +61,19 @@ export function registerTestProvider(models) {
               stopReason: 'pending',
               timestamp: Date.now(),
             };
+            if (
+              streamSimpleCalls > 1 &&
+              process.env.MINIHARNESS_COMPACTION_FAILURE === 'returned'
+            ) {
+              const error = {
+                ...base,
+                content: [],
+                stopReason: 'error',
+                errorMessage: 'stub compaction failure',
+              };
+              stream.push({ type: 'error', reason: 'error', error });
+              return stream;
+            }
             stream.push({
               type: 'start',
               partial: {

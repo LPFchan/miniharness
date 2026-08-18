@@ -160,6 +160,8 @@ type LifecycleEventName =
   | "tool_started"
   | "tool_finished"
   | "finalizing"
+  | "compaction_started"
+  | "compaction_finished"
   | "done"
   | "failed";
 
@@ -630,19 +632,28 @@ async function maybeCompact(
     return { kind: "nothing-to-compact" };
   }
 
-  const result = await compact(
-    preparation.value,
-    models,
-    model,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-  );
+  lifecycle.emit("compaction_started");
+  let result: Awaited<ReturnType<typeof compact>>;
+  try {
+    result = await compact(
+      preparation.value,
+      models,
+      model,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    );
+  } catch (error) {
+    lifecycle.emit("compaction_finished", { outcome: "failed" });
+    throw error;
+  }
   if (!result.ok) {
+    lifecycle.emit("compaction_finished", { outcome: "failed" });
     return { kind: "failed", error: `compaction failed: ${result.error.message}` };
   }
+  lifecycle.emit("compaction_finished", { outcome: "completed" });
   return {
     kind: "compacted",
     entry: {

@@ -6,16 +6,16 @@ Do not use it as a transcript or a scratchpad.
 
 ## Snapshot
 
-- Last updated: 2026-08-18
+- Last updated: 2026-08-19
 - Overall posture: `active`
-- Current focus: npm release 0.1.9 is installed in production and its early
-  session identity is live-verified through Heatmap chat.
+- Current focus: npm release 0.1.10 is prepared locally; the 0.1.9 release and
+  its early session identity remain live-verified through Heatmap chat.
 - Highest-priority blocker: none.
 - Next operator decision needed: none in this repo.
 - Related decisions: DEC-20260808-001 (CLI summon contract), DEC-20260808-002
   (CLI OAuth credential reuse), DEC-20260809-001 (default lifecycle events),
   DEC-20260814-001 (persisted-session resumption), DEC-20260818-001
-  (sessions start before inference)
+  (sessions start before inference), DEC-20260819-001 (compaction lifecycle)
 - Origin research: heatmap `records/research/RSH-20260808-001-miniharness-opencode-replacement.md`
 
 ## Current State Summary
@@ -30,10 +30,12 @@ one JSON envelope out, meaningful exit codes, registry-driven
 provider/model/effort resolution including custom OpenAI-compatible
 providers. Summons now project Pi agent events into versioned, content-free
 lifecycle NDJSON on stderr by default; `--silent` suppresses non-failure
-records. Version 0.1.9 creates or opens the session before provider setup,
-announces its id as `session_started`, and expands `{session_id}` in a
-supplied system prompt before inference. `--resume` reconstructs an existing Pi conversation, appends one new
-turn to the same JSONL file, and preserves its session id; unsafe or missing
+records. Prepared version 0.1.10 adds a content-free compaction pair around
+the actual compaction model call. Version 0.1.9 creates or opens the session
+before provider setup, announces its id as `session_started`, and expands
+`{session_id}` in a supplied system prompt before inference. `--resume`
+reconstructs an existing Pi conversation, appends one new turn to the same
+JSONL file, and preserves its session id; unsafe or missing
 ids fail as bad invocations. Release 0.1.7 carries explicit remote Streamable
 HTTP MCP servers, complete unique tool allowlists, safe endpoint validation,
 durable `--purpose` metadata, repeatable MCP CLI flags, and JSON-safe persisted
@@ -96,7 +98,7 @@ Nothing forked, nothing adopted beyond the two pinned libraries.
   The explicit MCP extension discovers tools before the model starts, requires
   every allowlisted name across the combined server set, rejects duplicates,
   permits plain HTTP only on loopback, and accepts no URL credentials. Suite:
-  109 tests, 103 pass, 0 fail, 6 live skips, 0 todo. Live-verified on crofai
+  111 tests, 105 pass, 0 fail, 6 live skips, 0 todo. Live-verified on crofai
   (deepseek-v4-flash-0731) and on Grimoire with an explicit empty system prompt
   plus seeded generation parameters; both returned the unchanged success
   envelope.
@@ -116,9 +118,10 @@ Nothing forked, nothing adopted beyond the two pinned libraries.
   a black box until timeout.
 - Current work: default stderr emits versioned NDJSON for started,
   request/response/streaming, coalesced content-free progress, tool,
-  finalizing, done, and failed states. `--silent` restores empty success stderr
-  while failures remain structured. Offline stub coverage proves ordering,
-  schema, redaction, silent success, and silent failure visibility.
+  finalizing, compaction, done, and failed states. `--silent` restores empty
+  success stderr while failures remain structured. Offline stub coverage proves
+  compaction ordering/outcomes, schema, redaction, silent success, and silent
+  failure visibility.
 - Exit criteria: met for miniharness; heatmap parsing is integration work.
 - Dependencies: Pi `Agent.subscribe()` in 0.84.1.
 - Risks: provider retry/backoff remains invisible until `pi-ai` exposes a
