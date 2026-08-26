@@ -48,6 +48,35 @@ node dist/cli.js --system-prompt "You are terse." "say hi"
 printf 'say hi' | node dist/cli.js
 ```
 
+For a multimodal user message, pass one local JSON manifest instead of a
+positional or stdin prompt:
+
+```json
+{
+  "version": 1,
+  "parts": [
+    { "type": "text", "text": "Describe this image." },
+    {
+      "type": "image",
+      "path": "/absolute/path/reference.png",
+      "media_type": "image/png",
+      "sha256": "<64 lowercase hexadecimal characters>"
+    }
+  ]
+}
+```
+
+Invoke it with `--input-manifest <path>`. The manifest path is resolved from
+the current directory when relative. Every image path must be an absolute
+local regular PNG or JPEG file; URLs, data URIs, symlinks, empty files,
+signature/MIME mismatches, and SHA-256 mismatches are rejected before a
+session or provider is contacted. Root and part objects reject unknown fields,
+`parts` must be non-empty, and each text part must contain a non-empty string.
+The validated bytes are base64-encoded into Pi's `AgentMessage`, preserving
+the manifest's text/image order. `--input-manifest` is mutually exclusive with
+both prompt sources; `--system-prompt-file -` remains available for a separate
+system prompt.
+
 Flags: `--provider <name>`, `--model <id-or-tier>` (`haiku`/`sonnet`/`opus`),
 `--effort <level>`, `--system-prompt <text>`, `--system-prompt-file <path>`
 (`-` = stdin; stdin serves either the prompt or the system prompt, not both),
@@ -63,7 +92,8 @@ overflow the model's context window, the library's compaction summarizes the
 history and records the compaction entry in the session JSONL; the envelope is
 unchanged), `--config-dir <path>` (override for the directory holding
 `models.json`; default is `PI_CODING_AGENT_DIR` or `~/.pi/agent/`), `--silent`
-(suppress lifecycle/progress events; failures remain), and `--help`.
+(suppress lifecycle/progress events), `--input-manifest <path>` (protocol v1
+ordered text/image input), and `--help`.
 
 `--version` prints the package version and exits before reading config or
 opening a session. `--no-system-prompt` is mutually exclusive with the two

@@ -9,10 +9,10 @@ Keep it durable. Do not use it as a changelog, inbox, or weekly narrative.
 - Canonical repo: `LPFchan/miniharness` (private)
 - Project id: `miniharness`
 - Operator: LPFchan
-- Last updated: 2026-08-19
+- Last updated: 2026-08-27
 - Related decisions: DEC-20260808-001, DEC-20260808-002,
   DEC-20260809-001, DEC-20260814-001, DEC-20260815-001,
-  DEC-20260819-001
+  DEC-20260819-001, DEC-20260827-001
 - Origin research: heatmap `records/research/RSH-20260808-001-miniharness-opencode-replacement.md`
 
 ## Project Thesis
@@ -61,6 +61,9 @@ week scope. The harness replaces `opencode run` in that path
   correction workflows.
 - Caller-owned purpose metadata for durable downstream accounting boundaries.
 - Compaction support.
+- Strict local multimodal input manifests with ordered text/image parts. PNG
+  and JPEG bytes are validated, hashed, and materialized into Pi user messages
+  before any session or provider work.
 
 ## Invariants
 
@@ -107,7 +110,14 @@ record is canonical. Summary:
   lifecycle records are emitted only when the compaction model call runs.
 - **Exit codes**: 0 success / 1 summon failed in flight / 2 bad invocation /
   3 harness internal. stdout empty unless 0.
-- **Input**: prompt positional or via stdin; `--system-prompt` /
+- **Input**: prompt positional or via stdin; `--input-manifest <path>` accepts
+  a strict protocol-v1 local JSON user message with non-empty ordered text and
+  image parts. Image paths are absolute regular PNG/JPEG files with required
+  media type and lowercase SHA-256; URLs, data URIs, symlinks, empty files,
+  signature mismatches, and hash mismatches fail before session/model/provider
+  contact. Manifest input is mutually exclusive with positional and stdin
+  prompts, and is delivered to Pi as an ordered `AgentMessage` containing the
+  actual base64 image bytes. `--system-prompt` /
   `--system-prompt-file` (first-class, replacing heatmap's prompt-gluing), or
   `--no-system-prompt` for a proven user-only adapter; bounded inline
   `--gen-params` accepts only `temperature`, `max_tokens`, non-negative `seed`,

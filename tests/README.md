@@ -1,7 +1,7 @@
 # Conformance tests
 
 This suite asserts the miniharness invocation contracts fixed in
-DEC-20260808-001, DEC-20260809-001, and DEC-20260819-001 against **any**
+DEC-20260808-001, DEC-20260809-001, DEC-20260819-001, and DEC-20260827-001 against **any**
 `miniharness` binary:
 argv/stdin in, one JSON envelope on stdout, lifecycle NDJSON on stderr, and
 exit codes 0–3. The binary is spawned from `MINIHARNESS_BIN`.
@@ -41,3 +41,5 @@ skip.
 | positional vs stdin prompt | Input — prompt (positional, or stdin when no positional and stdin not a TTY) |
 | `--system-prompt` / `--system-prompt-file -` | Input — system prompt |
 | injected in-flight failure | Exit code 1; empty stdout; structured summon failure |
+| `--input-manifest` validation | strict v1 schema; ordered text/image parts; local PNG/JPEG signatures; SHA-256; path safety; prompt-source conflicts |
+| `--input-manifest` transport | exact base64 image bytes and ordered Pi `AgentMessage`; invalid input fails before session/provider setup |

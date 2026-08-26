@@ -44,6 +44,7 @@ import {
 import { omitUndefinedObjectFields } from "./durable.js";
 import { discoverRemoteMcpTools, mergeRemoteMcpTools, RemoteMcpError } from "./mcp.js";
 import { cloudflareCompletedResponseFetch } from "./cloudflare.js";
+import { InputManifestError, readInputManifest } from "./input-manifest.js";
 
 /** Fixed by DEC-20260808-001: every field except `output` may be null. */
 interface Envelope {
@@ -136,6 +137,7 @@ interface Flags {
   systemPromptFile?: string;
   noSystemPrompt: boolean;
   genParams?: GenerationParams;
+  inputManifest?: string;
   cwd?: string;
   sessionDir?: string;
   resume?: string;
@@ -699,6 +701,7 @@ function parseArgv(argv: string[]): { flags: Flags; positionals: string[] } {
     ["--system-prompt", (v) => (flags.systemPrompt = v)],
     ["--system-prompt-file", (v) => (flags.systemPromptFile = v)],
     ["--gen-params", (v) => (flags.genParams = parseGenerationParams(v))],
+    ["--input-manifest", (v) => (flags.inputManifest = v)],
     ["--cwd", (v) => (flags.cwd = v)],
     ["--session-dir", (v) => (flags.sessionDir = v)],
     ["--resume", (v) => (flags.resume = v)],
@@ -948,6 +951,7 @@ Options:
   --no-system-prompt         Send no system prompt (not supported by every adapter)
   --gen-params <JSON object> Inline generation parameters: temperature, max_tokens,
                              seed, top_p, stop (bounded; no file/stdin syntax)
+  --input-manifest <path>   Ordered text/image input manifest (protocol v1)
   --cwd <path>               Working directory (must exist; default: process cwd)
   --session-dir <path>       Session JSONL directory (default: ~/.local/share/miniharness/sessions)
   --resume <session-id>      Continue an existing JSONL session in place
@@ -1004,11 +1008,29 @@ async function main(): Promise<void> {
   }
   lifecycle.emit("started");
 
-  // Prompt: positional, or stdin when piped. System prompt may also read
-  // stdin via --system-prompt-file -; the two reads are mutually exclusive.
-  let prompt: string;
+  // Prompt: the manifest is a complete user message and is mutually exclusive
+  // with both prompt sources. Its bytes are validated before session/model
+  // resolution so malformed local input cannot create a session or contact a
+  // provider.
+  let prompt: string | AgentMessage;
   let stdinConsumed = false;
-  if (positionals.length === 1) {
+  if (flags.inputManifest !== undefined) {
+    if (positionals.length > 0) {
+      usageError("--input-manifest cannot be combined with a positional prompt");
+    }
+    if (!process.stdin.isTTY && flags.systemPromptFile !== "-") {
+      const stdinProbe = await readStdinIfPiped();
+      if (stdinProbe.length > 0) {
+        usageError("--input-manifest cannot be combined with a stdin prompt");
+      }
+    }
+    try {
+      prompt = readInputManifest(flags.inputManifest);
+    } catch (error) {
+      if (error instanceof InputManifestError) usageError(error.message);
+      throw error;
+    }
+  } else if (positionals.length === 1) {
     prompt = positionals[0]!;
   } else {
     if (process.stdin.isTTY) {
@@ -1158,7 +1180,11 @@ async function main(): Promise<void> {
   const unsubscribeLifecycle = subscribeLifecycle(agent, resolved);
 
   try {
-    await agent.prompt(prompt);
+    if (typeof prompt === "string") {
+      await agent.prompt(prompt);
+    } else {
+      await agent.prompt(prompt);
+    }
     await agent.waitForIdle();
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);

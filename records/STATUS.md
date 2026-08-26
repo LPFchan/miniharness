@@ -6,16 +6,17 @@ Do not use it as a transcript or a scratchpad.
 
 ## Snapshot
 
-- Last updated: 2026-08-19
+- Last updated: 2026-08-27
 - Overall posture: `active`
-- Current focus: npm release 0.1.10 is published and installed globally with
-  compaction lifecycle events available to callers.
+- Current focus: protocol-v1 local multimodal manifests are implemented and
+  covered by offline transport tests; capability selection remains caller-owned.
 - Highest-priority blocker: none.
 - Next operator decision needed: none in this repo.
 - Related decisions: DEC-20260808-001 (CLI summon contract), DEC-20260808-002
   (CLI OAuth credential reuse), DEC-20260809-001 (default lifecycle events),
   DEC-20260814-001 (persisted-session resumption), DEC-20260818-001
-  (sessions start before inference), DEC-20260819-001 (compaction lifecycle)
+  (sessions start before inference), DEC-20260819-001 (compaction lifecycle),
+  DEC-20260827-001 (multimodal input manifest)
 - Origin research: heatmap `records/research/RSH-20260808-001-miniharness-opencode-replacement.md`
 
 ## Current State Summary
@@ -45,6 +46,13 @@ post-tool SSE stall without changing the Miniharness envelope or other
 providers. The packaged global binary completed a real Cloudflare Gemma cost
 query through Heatmap's eight-tool allowlist.
 Nothing forked, nothing adopted beyond the two pinned libraries.
+
+The manifest transport extension accepts a strict local JSON document with
+ordered text and PNG/JPEG image parts. It verifies regular-file paths,
+signatures, media types, and lowercase SHA-256 digests before opening a session
+or resolving a model. Pi receives the complete ordered `AgentMessage`, so the
+provider sees actual image bytes rather than descriptions. Legacy positional
+and stdin prompts retain their existing behavior.
 
 ## Active Phases Or Tracks
 
@@ -129,6 +137,19 @@ Nothing forked, nothing adopted beyond the two pinned libraries.
 - Related ids: RSH-20260809-001, DEC-20260809-001.
 
 ## Recent Changes To Project Reality
+
+- Date: 2026-08-27
+  - Change: protocol-v1 `--input-manifest` support was added. Manifest parsing
+    rejects unknown fields and invalid or unsafe local image inputs, verifies
+    PNG/JPEG signatures and SHA-256 digests, and materializes ordered text and
+    image content into Pi's user message before session/provider setup. The
+    existing success envelope, lifecycle stream, and legacy prompt sources are
+    unchanged. Offline tests cover schema, bytes, path safety, source
+    conflicts, preflight ordering, and provider transport.
+  - Why it matters: artmu-bench can supply exact reference images to a
+    multimodal model through the shared harness boundary without embedding
+    provider logic in miniharness.
+  - Related ids: DEC-20260827-001.
 
 - Date: 2026-08-19
   - Change: version 0.1.10 adds `compaction_started` and
