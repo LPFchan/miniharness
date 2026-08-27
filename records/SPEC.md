@@ -96,6 +96,8 @@ week scope. The harness replaces `opencode run` in that path
 
 - CLI entrypoint (the summon contract, see below).
 - Generated `models.json` (consumed, not authored here).
+- Registry model prices use USD per token and are normalized to Pi's USD per
+  million tokens when a model is resolved.
 - JSONL session directory (recovery/audit surface for heatmap `adopt`).
 - Distribution: the `miniharness` package on npmjs (`npm install -g
   miniharness`), published from this repo with a `files: [dist]` whitelist

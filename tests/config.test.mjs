@@ -337,7 +337,12 @@ test("resolveModel: explicit id on a provider that has no catalogue entry but a 
               id: "acme/small",
               reasoning: true,
               thinkingLevelMap: { off: "none", low: "low", high: "high" },
-              cost: { input: 1, output: 2, cacheRead: 0, cacheWrite: 0 },
+              cost: {
+                input: 0.000000375,
+                output: 0.000001875,
+                cacheRead: 0.0000000375,
+                cacheWrite: 0.00000046875,
+              },
               contextWindow: 200000,
             },
           ],
@@ -351,6 +356,12 @@ test("resolveModel: explicit id on a provider that has no catalogue entry but a 
   assert.equal(resolved.model.baseUrl, "https://acme.example/v1");
   assert.equal(resolved.model.thinkingLevelMap.off, "none");
   assert.equal(resolved.model.contextWindow, 200000);
+  assert.deepEqual(resolved.model.cost, {
+    input: 0.375,
+    output: 1.875,
+    cacheRead: 0.0375,
+    cacheWrite: 0.46875,
+  });
   // Fixture file entry wins over the catalogue for declared fields.
   assert.equal(resolveEffort(resolved, "low"), "low");
   // Absent map keys are provider defaults (supported); only xhigh/max need

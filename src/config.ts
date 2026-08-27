@@ -547,7 +547,10 @@ function inputOf(entry: Record<string, unknown> | undefined): Model<Api>["input"
   return [...new Set(value)] as Model<Api>["input"];
 }
 
-/** Narrow a fixture entry's cost block to a ModelCost (or undefined). */
+/**
+ * Convert registry prices (USD per token) to Pi prices (USD per million
+ * tokens), then narrow the result to a ModelCost.
+ */
 function costOf(
   entry: Record<string, unknown> | undefined,
 ): Model<Api>["cost"] | undefined {
@@ -557,11 +560,12 @@ function costOf(
   const input = numOf(cost, "input");
   const output = numOf(cost, "output");
   if (input === undefined || output === undefined) return undefined;
+  const perMillion = (price: number | undefined): number => (price ?? 0) * 1_000_000;
   return {
-    input,
-    output,
-    cacheRead: numOf(cost, "cacheRead") ?? 0,
-    cacheWrite: numOf(cost, "cacheWrite") ?? 0,
+    input: perMillion(input),
+    output: perMillion(output),
+    cacheRead: perMillion(numOf(cost, "cacheRead")),
+    cacheWrite: perMillion(numOf(cost, "cacheWrite")),
   };
 }
 

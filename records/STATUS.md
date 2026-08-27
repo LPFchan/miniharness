@@ -58,6 +58,9 @@ and stdin prompts retain their existing behavior.
 Custom Grimoire models retain their registry-declared image input support.
 Their request payloads use llama.cpp-native chat-template reasoning controls,
 and uncapped `maxTokens: -1` metadata omits the request-side output limit.
+Registry prices are normalized from USD per token to Pi's USD per million
+tokens at model resolution, so the summon envelope reports usable costs for
+registry-defined OpenRouter models.
 
 ## Active Phases Or Tracks
 
