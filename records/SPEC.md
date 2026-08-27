@@ -64,6 +64,10 @@ week scope. The harness replaces `opencode run` in that path
 - Strict local multimodal input manifests with ordered text/image parts. PNG
   and JPEG bytes are validated, hashed, and materialized into Pi user messages
   before any session or provider work.
+- Registry-declared custom-model input modalities are preserved during model
+  resolution. Grimoire requests translate reasoning levels to llama.cpp chat
+  template controls and omit the request output limit when registry metadata
+  declares an uncapped `maxTokens: -1` sentinel.
 
 ## Invariants
 

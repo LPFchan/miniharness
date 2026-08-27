@@ -8,8 +8,9 @@ Do not use it as a transcript or a scratchpad.
 
 - Last updated: 2026-08-27
 - Overall posture: `active`
-- Current focus: protocol-v1 local multimodal manifests are implemented and
-  covered by offline transport tests; capability selection remains caller-owned.
+- Current focus: protocol-v1 local multimodal manifests and registry-declared
+  custom-model modalities are implemented and covered by offline transport
+  tests; capability selection remains caller-owned.
 - Highest-priority blocker: none.
 - Next operator decision needed: none in this repo.
 - Related decisions: DEC-20260808-001 (CLI summon contract), DEC-20260808-002
@@ -53,6 +54,10 @@ signatures, media types, and lowercase SHA-256 digests before opening a session
 or resolving a model. Pi receives the complete ordered `AgentMessage`, so the
 provider sees actual image bytes rather than descriptions. Legacy positional
 and stdin prompts retain their existing behavior.
+
+Custom Grimoire models retain their registry-declared image input support.
+Their request payloads use llama.cpp-native chat-template reasoning controls,
+and uncapped `maxTokens: -1` metadata omits the request-side output limit.
 
 ## Active Phases Or Tracks
 

@@ -62,6 +62,7 @@ import { stream as openaiCompletionsStream, streamSimple as openaiCompletionsStr
 import { builtinProviders } from "@earendil-works/pi-ai/providers/all";
 import { claudeCredentialsFile, codexAuthFile, CliOAuthCredentialStore } from "./cli-oauth.js";
 import { existsSync } from "node:fs";
+import { transformGrimoirePayload } from "./grimoire.js";
 
 /** DEC tier names, in the registry's conventional order. */
 export const TIER_NAMES = ["haiku", "sonnet", "opus"] as const;
@@ -116,6 +117,30 @@ export interface ResolvedModel {
   tier?: TierName;
   model: Model<Api>;
   thinkingLevel: ModelThinkingLevel;
+}
+
+type OpenAICompletionsModel = Model<"openai-completions">;
+
+export function composeGrimoirePayloadTransform<T extends {
+  onPayload?: (payload: unknown, model: Model<Api>) => unknown | undefined | Promise<unknown | undefined>;
+  reasoning?: ModelThinkingLevel;
+  reasoningEffort?: ModelThinkingLevel;
+}>(
+  options: T | undefined,
+): T & { onPayload: NonNullable<T["onPayload"]> } {
+  const prior = options?.onPayload;
+  const effort = options?.reasoning ?? options?.reasoningEffort ?? "off";
+  return {
+    ...(options ?? {} as T),
+    onPayload: async (payload, model) => {
+      const previous = await prior?.(payload, model);
+      return transformGrimoirePayload(previous === undefined ? payload : previous, {
+        modelId: model.id,
+        effort,
+        thinkingLevelMap: model.thinkingLevelMap,
+      });
+    },
+  };
 }
 
 type Api = import("@earendil-works/pi-ai").Api;
@@ -191,6 +216,7 @@ export function registerCustomProviders(
   const builtins = builtinProviderIds();
   for (const [name, entry] of Object.entries(config.providers)) {
     if (builtins.has(name.toLowerCase())) continue;
+    const isGrimoire = name.toLowerCase() === "grimoire";
     const provider = createProvider({
       id: name,
       name,
@@ -207,8 +233,12 @@ export function registerCustomProviders(
       models: [],
       api: {
         "openai-completions": {
-          stream: openaiCompletionsStream,
-          streamSimple: openaiCompletionsStreamSimple,
+          stream: isGrimoire
+            ? (model, context, options) => openaiCompletionsStream(model as OpenAICompletionsModel, context, composeGrimoirePayloadTransform(options))
+            : openaiCompletionsStream,
+          streamSimple: isGrimoire
+            ? (model, context, options) => openaiCompletionsStreamSimple(model as OpenAICompletionsModel, context, composeGrimoirePayloadTransform(options))
+            : openaiCompletionsStreamSimple,
         },
       },
     });
@@ -433,6 +463,8 @@ export function resolveModel(
       if (tlm !== undefined) model.thinkingLevelMap = tlm;
       const reasoning = boolOf(fixtureModel, "reasoning");
       if (reasoning !== undefined) model.reasoning = reasoning;
+      const input = inputOf(fixtureModel);
+      if (input !== undefined) model.input = input;
     }
   } else {
     // Fixture entry present, catalogue entry absent: construct from the
@@ -444,7 +476,7 @@ export function resolveModel(
       provider: providerName,
       baseUrl: provider.base_url ?? "http://localhost/v1",
       reasoning: boolOf(fixtureModel, "reasoning") ?? true,
-      input: ["text"],
+      input: inputOf(fixtureModel) ?? ["text"],
       cost: costOf(fixtureModel) ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
       contextWindow: numOf(fixtureModel, "contextWindow") ?? 128_000,
       maxTokens: numOf(fixtureModel, "maxTokens") ?? 8_192,
@@ -505,6 +537,14 @@ function numOf(entry: Record<string, unknown> | undefined, key: string): number 
 function strOf(entry: Record<string, unknown> | undefined, key: string): string | undefined {
   const value = entry?.[key];
   return typeof value === "string" && value !== "" ? value : undefined;
+}
+
+/** Narrow a fixture entry's declared input modalities. */
+function inputOf(entry: Record<string, unknown> | undefined): Model<Api>["input"] | undefined {
+  const value = entry?.["input"];
+  if (!Array.isArray(value) || value.length === 0) return undefined;
+  if (!value.every((modality) => modality === "text" || modality === "image")) return undefined;
+  return [...new Set(value)] as Model<Api>["input"];
 }
 
 /** Narrow a fixture entry's cost block to a ModelCost (or undefined). */

@@ -143,6 +143,25 @@ test("resolveModel: explicit id resolves through the catalogue (deepseek)", () =
   assert.ok(Array.isArray(resolved.model.input));
 });
 
+test("resolveModel: custom fixture preserves multimodal input and uncapped output metadata", () => {
+  const config = {
+    providers: {
+      grimoire: {
+        base_url: "https://chat.lost.plus/v1",
+        models: [{
+          id: "qwen3.8-27B",
+          input: ["image", "text"],
+          maxTokens: -1,
+          reasoning: false,
+        }],
+      },
+    },
+  };
+  const resolved = resolveModel(config, "grimoire", "qwen3.8-27B", { models: [] });
+  assert.deepEqual(resolved.model.input, ["image", "text"]);
+  assert.equal(resolved.model.maxTokens, -1);
+});
+
 test("resolveModel: unknown provider lists the enrolled set", () => {
   const config = fixtureConfig();
   assert.throws(

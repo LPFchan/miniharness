@@ -43,3 +43,4 @@ skip.
 | injected in-flight failure | Exit code 1; empty stdout; structured summon failure |
 | `--input-manifest` validation | strict v1 schema; ordered text/image parts; local PNG/JPEG signatures; SHA-256; path safety; prompt-source conflicts |
 | `--input-manifest` transport | exact base64 image bytes and ordered Pi `AgentMessage`; invalid input fails before session/provider setup |
+| Grimoire payload transport | llama.cpp chat-template reasoning controls; uncapped sentinel omission; registry model modalities |
