@@ -30,6 +30,22 @@ test("Grimoire Qwen reasoning uses native chat-template effort", () => {
   });
 });
 
+test("Grimoire provider default omits llama.cpp reasoning controls", () => {
+  const payload = transformGrimoirePayload({
+    model: "qwen3.8-27B",
+    reasoning_effort: "off",
+    chat_template_kwargs: { preserve_thinking: true, enable_thinking: false },
+  }, {
+    modelId: "qwen3.8-27B",
+    effort: "off",
+    providerDefault: true,
+  });
+  assert.deepEqual(payload, {
+    model: "qwen3.8-27B",
+    chat_template_kwargs: { preserve_thinking: true },
+  });
+});
+
 test("Grimoire Muse reasoning uses native reasoning strength", () => {
   const payload = transformGrimoirePayload({ model: "muse-glimmer-30b-high", max_tokens: 4096 }, {
     modelId: "muse-glimmer-30b-high",
@@ -55,6 +71,14 @@ test("Grimoire request composition follows per-request reasoning and preserves p
     max_completion_tokens: 4096,
     prior: true,
     chat_template_kwargs: { enable_thinking: true, reasoning_effort: "xhigh" },
+  });
+
+  const mandatory = composeGrimoirePayloadTransform({ reasoning: "high" });
+  assert.deepEqual(await mandatory.onPayload({}, {
+    id: "qwen3.8-27B-high",
+    thinkingLevelMap: { off: null, high: "high" },
+  }), {
+    chat_template_kwargs: { enable_thinking: true, reasoning_effort: "high" },
   });
 
   const compaction = composeGrimoirePayloadTransform({});

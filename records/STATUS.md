@@ -30,7 +30,9 @@ is live-verified: a CLI-only thin harness on Pi's agent libraries
 (`@earendil-works/pi-agent-core` + `pi-ai` 0.84.1), sessions on as JSONL,
 one JSON envelope out, meaningful exit codes, registry-driven
 provider/model/effort resolution including custom OpenAI-compatible
-providers. Summons now project Pi agent events into versioned, content-free
+providers. Provider-default reasoning is a distinct CLI mode: `--effort
+default` leaves reasoning behavior to the provider, while `off` explicitly
+disables it. Summons now project Pi agent events into versioned, content-free
 lifecycle NDJSON on stderr by default; `--silent` suppresses non-failure
 records. Release 0.1.10 adds a content-free compaction pair around the actual
 compaction model call. Version 0.1.9 creates or opens the session

@@ -4,6 +4,7 @@ export type GrimoirePayloadOptions = Readonly<{
   modelId: string;
   effort: ModelThinkingLevel;
   thinkingLevelMap?: ThinkingLevelMap;
+  providerDefault?: boolean;
 }>;
 
 function object(value: unknown): Record<string, unknown> | undefined {
@@ -26,6 +27,15 @@ export function transformGrimoirePayload(payload: unknown, options: GrimoirePayl
   const chatTemplateKwargs: Record<string, unknown> = { ...configured };
   delete chatTemplateKwargs.reasoning_effort;
   delete chatTemplateKwargs.reasoning_strength;
+  if (options.providerDefault === true) {
+    delete chatTemplateKwargs.enable_thinking;
+    if (Object.keys(chatTemplateKwargs).length === 0) {
+      delete transformed.chat_template_kwargs;
+    } else {
+      transformed.chat_template_kwargs = chatTemplateKwargs;
+    }
+    return transformed;
+  }
   const mappedEffort = options.thinkingLevelMap?.[options.effort];
   const nativeEffort = typeof mappedEffort === "string" ? mappedEffort : options.effort;
   if (options.effort === "off") {

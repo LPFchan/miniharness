@@ -215,6 +215,16 @@ test('unsupported effort exits 2 naming the supported set', () => {
   assert.match(failureMessage(stderr), /effort "bogus" is not a thinking level/);
 });
 
+test('provider-default effort reaches the summon path', () => {
+  const dir = fixtureConfigDir();
+  const { status, stderr } = runHarness(
+    ['--config-dir', dir, '--provider', 'kimicode', '--model', 'k3', '--effort', 'default', 'hi'],
+    { env: { ...process.env, MINIHARNESS_FAIL_AFTER: 'provider-connect' } },
+  );
+  assert.equal(status, 1);
+  assert.match(stderr, /MINIHARNESS_FAIL_AFTER=provider-connect/);
+});
+
 test('missing config dir exits 2', () => {
   const dir = mkdtempSync(join(tmpdir(), 'miniharness-config-empty-'));
   const { stderr } = assertBadInvocation(['--config-dir', dir, 'hi']);

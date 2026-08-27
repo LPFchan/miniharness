@@ -131,7 +131,9 @@ record is canonical. Summary:
   sampling parameters; `--version` reports the package semantic version without
   opening config, sessions, lifecycle, or providers;
   `--provider` / `--model` / `--effort` selection resolved through setup's
-  registry and the generated `thinkingLevelMap`; cwd defaults to the process
+  registry and the generated `thinkingLevelMap`. `--effort default` omits the
+  provider reasoning control, while `--effort off` explicitly disables it;
+  cwd defaults to the process
   cwd with a `--cwd` override. `--purpose <identifier>` stores a bounded caller
   marker in session metadata without changing the prompt.
 - **Sessions**: JSONL at `~/.local/share/miniharness/sessions/` by default,

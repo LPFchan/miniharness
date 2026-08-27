@@ -265,12 +265,26 @@ test("resolveEffort: omitted effort defaults to the library default (off)", () =
   assert.equal(resolveEffort(resolved, undefined), "off");
 });
 
+test("resolveEffort: explicit default preserves provider reasoning behavior", () => {
+  const config = fixtureConfig();
+  const resolved = resolveModel(config, KIMICODE, "k3");
+  assert.equal(resolveEffort(resolved, "default"), "off");
+  assert.equal(resolved.model.thinkingLevelMap.off, null);
+});
+
+test("resolveEffort: mandatory named effort does not become provider default", () => {
+  const config = fixtureConfig();
+  const resolved = resolveModel(config, KIMICODE, "k3");
+  resolved.model.thinkingLevelMap.off = null;
+  assert.equal(resolveEffort(resolved, "high"), "high");
+});
+
 test("resolveEffort: unknown level name is an error", () => {
   const config = fixtureConfig();
   const resolved = resolveModel(config, KIMICODE, "k3");
   assert.throws(
     () => resolveEffort(resolved, "turbo"),
-    (error) => error instanceof ConfigError && /valid: off, minimal/.test(error.message),
+    (error) => error instanceof ConfigError && /valid: default, off, minimal/.test(error.message),
   );
 });
 

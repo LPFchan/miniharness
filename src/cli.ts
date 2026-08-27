@@ -944,7 +944,7 @@ Options:
   --version                  Print the package version and exit
   --provider <name>          Provider enrolled in the registry (models.json)
   --model <id-or-tier>       Model id or tier: haiku | sonnet | opus
-  --effort <level>           Thinking level: off|minimal|low|medium|high|xhigh|max
+  --effort <level>           Thinking: default|off|minimal|low|medium|high|xhigh|max
   --compaction <mode>        Compaction: off | auto (default: auto)
   --system-prompt <text>     System prompt
   --system-prompt-file <path>  System prompt from a file ("-" = stdin)

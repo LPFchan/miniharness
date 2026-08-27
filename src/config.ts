@@ -9,8 +9,9 @@
  * model's `thinkingLevelMap` from the generated `models.json`. The config
  * is consumed from `PI_CODING_AGENT_DIR` (setup-managed, generated from
  * the canonical registry); `--config-dir <path>` overrides. Omitted
- * provider/model/effort fall back to the provider's `default_model` (and
- * the library's default thinking level, `off`).
+ * provider/model fall back to the provider's `default_model`; omitted effort
+ * keeps the historical library default (`off`). `--effort default` is the
+ * explicit provider-default mode and omits a provider reasoning control.
  *
  * Config dir precedence: `--config-dir` value > `PI_CODING_AGENT_DIR`
  * env > `~/.pi/agent/`. `~/.pi/agent/` is Pi's own default agent config
@@ -120,6 +121,7 @@ export interface ResolvedModel {
 }
 
 type OpenAICompletionsModel = Model<"openai-completions">;
+const providerDefaultModels = new WeakSet<object>();
 
 export function composeGrimoirePayloadTransform<T extends {
   onPayload?: (payload: unknown, model: Model<Api>) => unknown | undefined | Promise<unknown | undefined>;
@@ -138,6 +140,7 @@ export function composeGrimoirePayloadTransform<T extends {
         modelId: model.id,
         effort,
         thinkingLevelMap: model.thinkingLevelMap,
+        providerDefault: providerDefaultModels.has(model),
       });
     },
   };
@@ -583,9 +586,20 @@ export function resolveEffort(
   effort: string | undefined,
 ): ModelThinkingLevel {
   if (effort === undefined || effort === "") return "off";
+  if (effort === "default") {
+    // Pi represents an omitted reasoning request as the neutral `off` level.
+    // Marking off unsupported on this invocation makes its provider adapters
+    // omit the wire control instead of translating it to `none`/disabled.
+    resolved.model.thinkingLevelMap = {
+      ...resolved.model.thinkingLevelMap,
+      off: null,
+    };
+    providerDefaultModels.add(resolved.model);
+    return "off";
+  }
   if (!isThinkingLevel(effort)) {
     throw new ConfigResolutionError(
-      `effort "${effort}" is not a thinking level (valid: off, minimal, low, medium, high, xhigh, max)`,
+      `effort "${effort}" is not a thinking level (valid: default, off, minimal, low, medium, high, xhigh, max)`,
     );
   }
 

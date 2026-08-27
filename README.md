@@ -78,7 +78,7 @@ both prompt sources; `--system-prompt-file -` remains available for a separate
 system prompt.
 
 Flags: `--provider <name>`, `--model <id-or-tier>` (`haiku`/`sonnet`/`opus`),
-`--effort <level>`, `--system-prompt <text>`, `--system-prompt-file <path>`
+`--effort <default|off|minimal|low|medium|high|xhigh|max>`, `--system-prompt <text>`, `--system-prompt-file <path>`
 (`-` = stdin; stdin serves either the prompt or the system prompt, not both),
 `--no-system-prompt` (send no system prompt; Miniharness fails closed for Pi
 adapters that inject their own instruction when the prompt is empty),
