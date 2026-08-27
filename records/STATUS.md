@@ -62,7 +62,9 @@ Their request payloads use llama.cpp-native chat-template reasoning controls,
 and uncapped `maxTokens: -1` metadata omits the request-side output limit.
 Registry prices are normalized from USD per token to Pi's USD per million
 tokens at model resolution, so the summon envelope reports usable costs for
-registry-defined OpenRouter models.
+registry-defined OpenRouter models. Generated context and output limits also
+override matching Pi catalogue entries, preventing stale bundled limits from
+silently truncating current provider models.
 
 ## Active Phases Or Tracks
 
@@ -147,6 +149,13 @@ registry-defined OpenRouter models.
 - Related ids: RSH-20260809-001, DEC-20260809-001.
 
 ## Recent Changes To Project Reality
+
+- Date: 2026-08-27
+  - Change: generated registry metadata now overrides Pi catalogue context,
+    output-limit, and pricing fields for matching model ids.
+  - Why it matters: provider refreshes can correct stale bundled catalogue
+    limits before a summon is sent.
+  - Related ids: none.
 
 - Date: 2026-08-27
   - Change: protocol-v1 `--input-manifest` support was added. Manifest parsing

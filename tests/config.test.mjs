@@ -95,6 +95,48 @@ test("resolveModel: explicit id resolves with catalogue merge", () => {
   });
 });
 
+test("resolveModel: registry limits and pricing override a stale catalogue entry", () => {
+  const config = {
+    providers: {
+      openrouter: {
+        base_url: "https://openrouter.ai/api/v1",
+        models: [{
+          id: "meta/muse-spark-1.2",
+          contextWindow: 1_048_576,
+          maxTokens: 943_718,
+          cost: { input: 0.00000125, output: 0.00000425, cacheRead: 0.00000015, cacheWrite: 0 },
+          input: ["text", "image"],
+          reasoning: true,
+        }],
+      },
+    },
+  };
+  const catalogue = {
+    models: [{
+      id: "meta/muse-spark-1.2",
+      name: "Meta: Muse Spark 1.2",
+      api: "openai-completions",
+      baseUrl: "https://openrouter.ai/api/v1",
+      provider: "openrouter",
+      reasoning: true,
+      input: ["text", "image"],
+      cost: { input: 1.25, output: 4.25, cacheRead: 0.15, cacheWrite: 0 },
+      contextWindow: 1_048_576,
+      maxTokens: 4_096,
+    }],
+  };
+
+  const resolved = resolveModel(config, "openrouter", "meta/muse-spark-1.2", catalogue);
+  assert.equal(resolved.model.contextWindow, 1_048_576);
+  assert.equal(resolved.model.maxTokens, 943_718);
+  assert.deepEqual(resolved.model.cost, {
+    input: 1.25,
+    output: 4.25,
+    cacheRead: 0.15,
+    cacheWrite: 0,
+  });
+});
+
 test("resolveModel: tier resolves through the provider tier map", () => {
   const config = fixtureConfig();
   const resolved = resolveModel(config, COMMANDCODE, "sonnet");

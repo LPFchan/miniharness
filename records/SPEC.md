@@ -44,6 +44,8 @@ week scope. The harness replaces `opencode run` in that path
 - Provider/model/effort selection driven by a generated `models.json`,
   projected from the operator's canonical registry
   (`~/.config/providers/registry.json`, LPFchan/setup).
+- Generated per-model context, output, pricing, modality, and reasoning fields
+  override matching entries in Pi's bundled catalogue.
 - Subscription OAuth reuse: the `anthropic` and `codex` providers run on
   the operator's existing Claude Code / Codex CLI logins, with refresh
   write-back to the CLI files (DEC-20260808-002).
@@ -97,7 +99,8 @@ week scope. The harness replaces `opencode run` in that path
 - CLI entrypoint (the summon contract, see below).
 - Generated `models.json` (consumed, not authored here).
 - Registry model prices use USD per token and are normalized to Pi's USD per
-  million tokens when a model is resolved.
+  million tokens when a model is resolved. Registry context and output limits
+  remain authoritative over Pi's bundled catalogue values.
 - JSONL session directory (recovery/audit surface for heatmap `adopt`).
 - Distribution: the `miniharness` package on npmjs (`npm install -g
   miniharness`), published from this repo with a `files: [dist]` whitelist

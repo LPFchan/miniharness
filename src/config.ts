@@ -468,6 +468,12 @@ export function resolveModel(
       if (reasoning !== undefined) model.reasoning = reasoning;
       const input = inputOf(fixtureModel);
       if (input !== undefined) model.input = input;
+      const contextWindow = numOf(fixtureModel, "contextWindow");
+      if (contextWindow !== undefined) model.contextWindow = contextWindow;
+      const maxTokens = numOf(fixtureModel, "maxTokens");
+      if (maxTokens !== undefined) model.maxTokens = maxTokens;
+      const cost = costOf(fixtureModel);
+      if (cost !== undefined) model.cost = cost;
     }
   } else {
     // Fixture entry present, catalogue entry absent: construct from the
