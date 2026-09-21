@@ -1,0 +1,48 @@
+# Publishes miniharness to npm when a `vX.Y.Z` tag is pushed. Authentication is
+# npm Trusted Publishing (OIDC): npm >= 11.5.1 exchanges this job's GitHub
+# identity token for a short-lived publish grant and attaches provenance on its
+# own. There is no NPM_TOKEN anywhere.
+#
+# npmjs.com side (package Settings -> Trusted publishing): GitHub Actions,
+# owner LPFchan, repository miniharness, workflow publish.yml, environment
+# blank.
+name: publish miniharness
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - run: npm ci
+
+      # The suite runs against dist/, so build before testing rather than
+      # leaving it to prepublishOnly.
+      - run: npm run build
+
+      - run: npm test
+
+      - name: tag matches package.json version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          version="$(node -p "require('./package.json').version")"
+          if [ "$tag" != "$version" ]; then
+            echo "tag says $tag but package.json says $version" >&2
+            exit 1
+          fi
+
+      - run: npm publish

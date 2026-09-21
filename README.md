@@ -30,6 +30,23 @@ else `~/.pi/agent/`. That file is a projection of the operator's canonical
 provider registry (LPFchan/setup); on a machine without it the CLI installs
 fine but exits 2 until a config exists.
 
+## Releasing
+
+Pushing a `vX.Y.Z` tag publishes to npm from GitHub Actions
+(`.github/workflows/publish.yml`). The job installs, builds, runs the suite,
+checks the tag against `package.json`, and publishes.
+
+Authentication is npm Trusted Publishing (OIDC) — there is no token in the
+repo or in anyone's `~/.npmrc`. It requires a one-time setup on npmjs.com
+under the package's Settings -> Trusted publishing: GitHub Actions, owner
+`LPFchan`, repository `miniharness`, workflow `publish.yml`, environment
+blank.
+
+```sh
+npm version patch          # or minor/major; commit the bump
+git push && git push --tags
+```
+
 ## Build & smoke
 
 ```sh
