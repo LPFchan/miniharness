@@ -1,6 +1,10 @@
 {
   "name": "miniharness",
   "version": "0.1.12",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LPFchan/miniharness.git"
+  },
   "type": "module",
   "description": "A minimal coding-agent harness for agent CLI invocation only - one headless summon, one JSON envelope out.",
   "license": "UNLICENSED",
