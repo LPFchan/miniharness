@@ -442,7 +442,11 @@ async function appendSession(
       await open.session.appendMessage(omitUndefinedObjectFields(message));
     }
     if (compactionEntry !== undefined) {
-      await open.session.appendEntry(compactionEntry, "main");
+      /* The entry crosses the same strict JSON boundary as a message and
+      carries optional fields the library leaves undefined, so it needs the
+      same sanitizing. Without it, a summon that compacts does all its work
+      and then dies on the session write with exit 3. */
+      await open.session.appendEntry(omitUndefinedObjectFields(compactionEntry), "main");
     }
     await open.session.getLog();
   } finally {

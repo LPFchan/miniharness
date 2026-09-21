@@ -17,6 +17,12 @@ function usage(extra = {}) {
     output: 2,
     cacheRead: 0,
     cacheWrite: 0,
+    // Real providers report the optional counts as explicitly undefined keys,
+    // which is what reaches the session's strict JSON boundary. Keep that
+    // shape so the compaction entry is written the way a live summon writes
+    // it, not a tidier version of it.
+    reasoning: undefined,
+    cacheWrite1h: undefined,
     ...extra,
   };
 }
