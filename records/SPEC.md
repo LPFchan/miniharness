@@ -55,6 +55,10 @@ week scope. The harness replaces `opencode run` in that path
 - Explicit remote Streamable HTTP MCP client attachment with a complete tool
   allowlist, but **no MCP server and no sub-agents by default**; capabilities
   are present only when the caller supplies `--mcp-server` and `--mcp-tool`.
+- Opt-in exposure of Pi's built-in `bash` tool via `--allow-bash`, off by
+  default and independent of the MCP allowlist, failing closed on a name
+  collision with an exposed MCP tool (DEC-20260921-001). No other built-in
+  tool is exposed.
 - Absolutely minimal system prompt and resource footprint.
 - 8–16 concurrent instances, concurrency capped in the low teens.
 - Session persistence as JSONL at a harness-owned path, so heatmap's
@@ -137,8 +141,14 @@ record is canonical. Summary:
   registry and the generated `thinkingLevelMap`. `--effort default` omits the
   provider reasoning control, while `--effort off` explicitly disables it;
   cwd defaults to the process
-  cwd with a `--cwd` override. `--purpose <identifier>` stores a bounded caller
+  cwd with a `--cwd` override, which sets both the working directory of
+  built-in tools and the cwd recorded in the session header.
+  `--purpose <identifier>` stores a bounded caller
   marker in session metadata without changing the prompt.
+- **Built-in tools**: `--allow-bash` exposes Pi's `bash` tool, off by default.
+  It runs commands in the summon's cwd, is not subject to `--mcp-tool`, and
+  collides fatally with an MCP tool of the same name. Commands never reach
+  stderr; the session JSONL is their record (DEC-20260921-001).
 - **Sessions**: JSONL at `~/.local/share/miniharness/sessions/` by default,
   on by default (heatmap's adoption join reads them), `--no-session` opts
   out, `--session-dir` overrides. A new session is created before provider

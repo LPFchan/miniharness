@@ -5,6 +5,7 @@
 import {
   Agent,
   compact,
+  createBashTool,
   DEFAULT_COMPACTION_SETTINGS,
   buildSessionContext,
   estimateContextTokens,
@@ -13,6 +14,7 @@ import {
   type AgentEvent,
   type AgentMessage,
   type AgentTool,
+  type BashToolInput,
   type CompactionEntry,
   type Entry,
 } from "@earendil-works/pi-agent-core";
@@ -146,6 +148,8 @@ interface Flags {
   purpose?: string;
   mcpServers: string[];
   mcpTools: string[];
+  /** Expose Pi's built-in bash tool to the model (DEC-20260921-001). */
+  allowBash: boolean;
   /** Suppress non-failure lifecycle records (DEC-20260809-001). */
   silent: boolean;
   help: boolean;
@@ -371,12 +375,13 @@ async function openResumedSession(dir: string, id: string): Promise<OpenSession>
 async function createSession(
   dir: string,
   purpose: string | undefined,
+  cwd: string,
 ): Promise<OpenSession> {
-  const fs = new NodeExecutionEnv({ cwd: process.cwd() });
+  const fs = new NodeExecutionEnv({ cwd });
   try {
     const repo = new JsonlSessionRepo({ fs, sessionsRoot: dir });
     const session = await repo.create({
-      cwd: process.cwd(),
+      cwd,
       ...(purpose === undefined ? {} : { metadata: { purpose } }),
     });
     const metadata = await session.getMetadata();
@@ -689,6 +694,7 @@ function parseArgv(argv: string[]): { flags: Flags; positionals: string[] } {
     compaction: "auto",
     mcpServers: [],
     mcpTools: [],
+    allowBash: false,
   };
   const positionals: string[] = [];
   const seen = new Set<string>();
@@ -737,6 +743,10 @@ function parseArgv(argv: string[]): { flags: Flags; positionals: string[] } {
     }
     if (arg === "--silent") {
       flags.silent = true;
+      continue;
+    }
+    if (arg === "--allow-bash") {
+      flags.allowBash = true;
       continue;
     }
     if (arg.startsWith("--")) {
@@ -912,6 +922,9 @@ function parseCompaction(value: string): "off" | "auto" {
   usageError(`--compaction must be "off" or "auto" (got "${value}")`);
 }
 
+/** Name Pi registers its built-in bash tool under; the model's lookup key. */
+const BASH_TOOL_NAME = "bash";
+
 const SAFE_PURPOSE = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
 
 function parsePurpose(value: string): string {
@@ -958,6 +971,8 @@ Options:
   --purpose <identifier>     Durable purpose marker in session metadata
   --mcp-server <label>=<url>  Attach one repeatable remote Streamable HTTP MCP server
   --mcp-tool <name>           Restrict MCP calls to this repeatable tool name
+  --allow-bash               Expose Pi's built-in bash tool (runs shell commands
+                             in --cwd; off by default)
   --no-session               Do not persist a session
   --silent                   Suppress lifecycle/progress events (failures remain)
   --config-dir <path>        Config directory holding models.json
@@ -1062,6 +1077,10 @@ async function main(): Promise<void> {
       usageError(`--cwd is not a directory: ${flags.cwd}`);
     }
   }
+  /* Until local tools existed nothing consumed a working directory, so --cwd
+  was validated and then dropped. It is load-bearing for --allow-bash and for
+  the cwd recorded in session metadata. */
+  const effectiveCwd = flags.cwd ?? process.cwd();
 
   // Provider/model/effort validation happens before any network or summon.
   // Keep the established session/config ordering: a session-dir or resume
@@ -1073,7 +1092,7 @@ async function main(): Promise<void> {
   const opened = session.enabled && session.sessionDir !== undefined
     ? session.resume !== undefined
       ? await openResumedSession(session.sessionDir, session.resume)
-      : await createSession(session.sessionDir, session.purpose)
+      : await createSession(session.sessionDir, session.purpose, effectiveCwd)
     : undefined;
   if (opened !== undefined) {
     lifecycle.emit("session_started", {
@@ -1144,6 +1163,33 @@ async function main(): Promise<void> {
     }
   }
 
+  /* Pi's built-in bash tool, opt-in per DEC-20260921-001. It is not an MCP
+  tool, so it is neither required in nor checked against the --mcp-tool
+  allowlist; it is appended after the MCP merge. Tool names are the model's
+  lookup key, so a collision with an exposed MCP tool fails closed the same way
+  duplicate MCP names do. */
+  let tools = remoteTools;
+  let bashEnv: NodeExecutionEnv | undefined;
+  if (flags.allowBash) {
+    if (remoteTools.some((tool) => tool.name === BASH_TOOL_NAME)) {
+      usageError(`--allow-bash conflicts with an MCP tool named ${BASH_TOOL_NAME}`);
+    }
+    bashEnv = new NodeExecutionEnv({ cwd: effectiveCwd });
+    const bash = createBashTool();
+    const bashContext = { env: bashEnv };
+    tools = [
+      ...remoteTools,
+      {
+        ...bash,
+        /* The loop validates arguments against this tool's own schema and
+        passes the validated value through (pi-agent-core agent-loop:404), so
+        widening `unknown` back to the bash input type is sound here. */
+        execute: (toolCallId, params, signal, onUpdate) =>
+          bash.execute(toolCallId, params as BashToolInput, signal, onUpdate, bashContext),
+      } as AgentTool,
+    ];
+  }
+
   const agent = new Agent({
     initialState: {
       systemPrompt: flags.noSystemPrompt
@@ -1153,7 +1199,7 @@ async function main(): Promise<void> {
           : "You are miniharness, a minimal headless assistant. Reply concisely and directly.",
       model: resolved.model,
       thinkingLevel: resolved.thinkingLevel,
-      tools: remoteTools,
+      tools,
       messages: opened?.initialMessages ?? [],
     },
     // Invocation generation parameters belong only to the main agent loop.
@@ -1193,6 +1239,9 @@ async function main(): Promise<void> {
     // Tear down any in-flight provider connection before exiting.
     agent.abort();
     unsubscribeLifecycle();
+    // Best-effort by the Shell contract: never throws, so it cannot mask a
+    // summon failure on its way out.
+    await bashEnv?.cleanup();
   }
 
   const messages = agent.state.messages;

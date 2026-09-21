@@ -84,9 +84,12 @@ Flags: `--provider <name>`, `--model <id-or-tier>` (`haiku`/`sonnet`/`opus`),
 adapters that inject their own instruction when the prompt is empty),
 `--gen-params '<inline JSON object>'` (supported fields only:
 `temperature`, `max_tokens`, `seed`, `top_p`, and `stop`),
-`--cwd <path>` (must exist and be a directory), `--session-dir <path>`,
+`--cwd <path>` (must exist and be a directory; sets the working directory for
+built-in tools and the cwd recorded in the session header),
+`--session-dir <path>`,
 `--resume <session-id>`, `--purpose <identifier>`, repeatable
-`--mcp-server <label>=<url>`, repeatable `--mcp-tool <name>`, `--no-session`,
+`--mcp-server <label>=<url>`, repeatable `--mcp-tool <name>`,
+`--allow-bash`, `--no-session`,
 `--compaction <off|auto>` (default `auto`: when a completed transcript would
 overflow the model's context window, the library's compaction summarizes the
 history and records the compaction entry in the session JSONL; the envelope is
@@ -117,6 +120,30 @@ New sessions are created before provider setup and reported immediately as a
 `session_started` lifecycle event. A supplied system prompt may contain
 `{session_id}`; Miniharness replaces it with the opened id before inference.
 The token requires session persistence.
+
+### Built-in bash tool
+
+`--allow-bash` exposes Pi's built-in `bash` tool so the model can run shell
+commands. It is off by default and independent of `--mcp-tool`:
+
+```sh
+miniharness --allow-bash --provider "$PROVIDER" --model "$MODEL" \
+  --cwd /var/log \
+  "Is anything on this machine doing long-running work right now?"
+```
+
+Commands run in `--cwd` (the process cwd by default). Output truncation and
+per-call timeouts come from Pi's implementation; the tool also accepts an
+optional per-command `timeout`.
+
+The commands the model runs are **not** written to stderr — the lifecycle
+stream stays content-free by DEC-20260809-001. They are recorded in the session
+JSONL, so a caller that needs an audit trail of what ran must not pass
+`--no-session`.
+
+If a configured MCP server already exposes a tool named `bash`, the summon
+fails as a usage error (exit 2) rather than guessing which one the model meant.
+No other Pi built-in (`read`, `write`, `edit`) is exposed.
 
 ### Remote MCP tools
 

@@ -6,18 +6,20 @@ Do not use it as a transcript or a scratchpad.
 
 ## Snapshot
 
-- Last updated: 2026-08-27
+- Last updated: 2026-09-21
 - Overall posture: `active`
-- Current focus: protocol-v1 local multimodal manifests and registry-declared
-  custom-model modalities are implemented and covered by offline transport
-  tests; capability selection remains caller-owned.
+- Current focus: opt-in local tool exposure. `--allow-bash` lands Pi's
+  built-in bash tool behind a flag for callers that need the model to inspect
+  the host rather than query a service; capability selection remains
+  caller-owned.
 - Highest-priority blocker: none.
 - Next operator decision needed: none in this repo.
 - Related decisions: DEC-20260808-001 (CLI summon contract), DEC-20260808-002
   (CLI OAuth credential reuse), DEC-20260809-001 (default lifecycle events),
   DEC-20260814-001 (persisted-session resumption), DEC-20260818-001
   (sessions start before inference), DEC-20260819-001 (compaction lifecycle),
-  DEC-20260827-001 (multimodal input manifest)
+  DEC-20260827-001 (multimodal input manifest), DEC-20260921-001 (opt-in
+  built-in bash tool)
 - Origin research: heatmap `records/research/RSH-20260808-001-miniharness-opencode-replacement.md`
 
 ## Current State Summary
@@ -56,6 +58,15 @@ signatures, media types, and lowercase SHA-256 digests before opening a session
 or resolving a model. Pi receives the complete ordered `AgentMessage`, so the
 provider sees actual image bytes rather than descriptions. Legacy positional
 and stdin prompts retain their existing behavior.
+
+`--allow-bash` exposes Pi's built-in bash tool, off by default, appended
+after the MCP merge and failing closed on a name collision with an exposed MCP
+tool. It is the first local tool the harness offers; `read`, `write`, and
+`edit` remain unexposed. The flag also makes `--cwd` load-bearing: it was
+validated and then discarded before any tool consumed a working directory, and
+now sets both the tool's execution environment and the cwd recorded in the
+session header. Commands stay off the lifecycle stream, so the session JSONL
+is their only record.
 
 Custom Grimoire models retain their registry-declared image input support.
 Their request payloads use llama.cpp-native chat-template reasoning controls,
