@@ -30,14 +30,19 @@
  * credentials. Every failure is a typed `ConfigError` whose `message` is a
  * one-line human string the CLI renders as DEC exit 2.
  *
- * Custom providers: a registry provider that is not a Pi builtin id
- * (crofai, grimoire, kimicode, …) is registered onto the summon-path
- * `Models` instance by `registerCustomProviders()` as an OpenAI-compatible
- * endpoint — `baseUrl` from the projection, API key resolved from setup's
- * auth store (`~/.local/share/opencode/auth.json`, the same writer/reader
- * seam setup uses for opencode auth; `MINIHARNESS_AUTH_FILE` overrides for
- * tests). This is what makes `--provider crofai` stream instead of dying
- * with "Unknown provider".
+ * Custom providers: every enrolled registry provider (crofai, grimoire,
+ * kimicode, opencode-go, …) is registered onto the summon-path `Models`
+ * instance by `registerCustomProviders()` as an OpenAI-compatible endpoint —
+ * `baseUrl` from the projection, API key resolved from setup's auth store
+ * (`~/.local/share/opencode/auth.json`, the same writer/reader seam setup
+ * uses for opencode auth; `MINIHARNESS_AUTH_FILE` overrides for tests) under
+ * the registry's declared `auth_key`. This is what makes `--provider crofai`
+ * stream instead of dying with "Unknown provider".
+ *
+ * DEC-20260921-002: enrollment beats a Pi builtin of the same id. The
+ * registry decides the endpoint, credential, transport, and required headers
+ * for the providers it enrolls; Pi's bundled entry is a snapshot with its own
+ * auth assumptions and must not shadow it.
  *
  * DEC-20260808-002: registry providers backed by an existing CLI OAuth
  * login (`anthropic` via Claude Code's credentials, `codex` via the Codex
@@ -90,6 +95,19 @@ export interface ProviderEntry {
   models?: Record<string, unknown>[];
   default_model?: string;
   tiers?: TierMap;
+  /**
+   * Name of the stored credential this provider authenticates with, when it
+   * differs from the provider name. Projected from the registry's `auth.key`:
+   * OpenCode Go and Zen are separate enrollments sharing one key.
+   */
+  auth_key?: string;
+  /**
+   * Extra request headers the endpoint requires, projected from the registry.
+   * `{session_id}` is replaced with the summon's session id. OpenCode Go
+   * rejects requests without `x-opencode-session`, and that requirement
+   * belongs to the enrollment, not to this harness.
+   */
+  headers?: Record<string, string>;
   /** Auth pointers for the setup generator's future use; not consumed here. */
   auth?: unknown;
   [key: string]: unknown;
@@ -182,9 +200,30 @@ export function createCatalogue(): Catalogue {
   return { models: models.getModels() };
 }
 
-/** Provider ids Pi ships as builtins (lowercase for matching). */
-function builtinProviderIds(): Set<string> {
-  return new Set(builtinProviders().map((provider) => provider.id.toLowerCase()));
+/**
+ * Resolve registry-declared request headers, substituting `{session_id}`.
+ *
+ * A header whose template needs a session id is dropped when the summon has
+ * none (`--no-session`), rather than sent with an empty or literal value: the
+ * endpoints that ask for one are using it to group a conversation, and a
+ * placeholder would be worse than its absence.
+ */
+function resolveProviderHeaders(
+  headers: Record<string, string> | undefined,
+  sessionId: string | undefined,
+): Record<string, string> | undefined {
+  if (headers === undefined) return undefined;
+  const resolved: Record<string, string> = {};
+  for (const [key, value] of Object.entries(headers)) {
+    if (typeof value !== "string") continue;
+    if (value.includes("{session_id}")) {
+      if (sessionId === undefined || sessionId === "") continue;
+      resolved[key] = value.replaceAll("{session_id}", sessionId);
+      continue;
+    }
+    resolved[key] = value;
+  }
+  return Object.keys(resolved).length === 0 ? undefined : resolved;
 }
 
 /** Read one provider's API key from setup's auth store; undefined when absent. */
@@ -205,30 +244,42 @@ function readAuthKey(providerName: string, authFile: string): string | undefined
 }
 
 /**
- * Register registry providers Pi does not ship as builtins onto a
- * summon-path `Models` instance, as OpenAI-compatible endpoints. `baseUrl`
- * comes from the projection; the API key resolves from setup's auth store
+ * Register every enrolled registry provider onto a summon-path `Models`
+ * instance as an OpenAI-compatible endpoint. `baseUrl` comes from the
+ * projection; the API key resolves from setup's auth store
  * (`MINIHARNESS_AUTH_FILE` override) per call, so nothing secret is cached
- * in the config layer. Providers already known to Pi are left untouched.
+ * in the config layer.
+ *
+ * Enrollment beats Pi's bundled provider definitions (DEC-20260921-002).
+ * Setup's registry is the source of truth for which providers exist, where
+ * they live, and which stored credential they use. Pi's bundled entry for the
+ * same id carries a snapshot catalogue and its own auth expectations, and
+ * letting it shadow the registry left enrolled providers pointed at a stale
+ * definition with no access to setup's keys. The two CLI OAuth aliases
+ * (anthropic, codex) are applied after this and still win, because their
+ * credential is a CLI login rather than a stored key.
+ *
+ * The credential name is the registry's declared `auth_key` when present,
+ * not the provider name: OpenCode Go and Zen are separate providers sharing
+ * one stored key, and only the registry knows that.
  */
 export function registerCustomProviders(
   models: MutableModels,
   config: Config,
   authFile: string = process.env[AUTH_FILE_ENV] ?? DEFAULT_AUTH_FILE,
 ): void {
-  const builtins = builtinProviderIds();
   for (const [name, entry] of Object.entries(config.providers)) {
-    if (builtins.has(name.toLowerCase())) continue;
     const isGrimoire = name.toLowerCase() === "grimoire";
+    const credentialName = entry.auth_key ?? name;
     const provider = createProvider({
       id: name,
       name,
       baseUrl: entry.base_url,
       auth: {
         apiKey: {
-          name: `${name} API key`,
+          name: `${credentialName} API key`,
           resolve: async () => {
-            const key = readAuthKey(name, authFile);
+            const key = readAuthKey(credentialName, authFile);
             return key === undefined ? undefined : { auth: { apiKey: key }, source: authFile };
           },
         },
@@ -459,6 +510,16 @@ export function resolveModel(
       id,
       provider: providerName,
       baseUrl: provider.base_url ?? catalogueEntry.baseUrl,
+      /* The catalogue entry may declare a transport the enrolled provider does
+      not serve: Pi bundles kimi models as anthropic-messages, while the
+      registry enrolls kimicode as an OpenAI-compatible endpoint and
+      registerCustomProviders wires only that. The enrollment decides the
+      transport; the catalogue only contributes capability defaults. Providers
+      the registry types otherwise (DirectAnthropic, OpenAIResponses) keep the
+      catalogue's api, because they route through their builtin. */
+      ...(provider.provider_type === "OpenAICompatible"
+        ? { api: "openai-completions" as const }
+        : {}),
     };
     if (fixtureModel) {
       // Registry projection wins where the file defines a field.
@@ -639,13 +700,20 @@ function isThinkingLevel(value: string): value is ModelThinkingLevel {
  */
 export function resolveConfig(
   configDir: string,
-  flags: { provider?: string; model?: string; effort?: string },
+  flags: { provider?: string; model?: string; effort?: string; sessionId?: string },
   catalogue: Catalogue = createCatalogue(),
 ): ResolvedModel {
   const config = loadConfig(configDir);
   const providerName = flags.provider ?? inferProvider(config);
   const resolved = resolveModel(config, providerName, flags.model, catalogue);
   resolved.thinkingLevel = resolveEffort(resolved, flags.effort);
+  /* Registry-declared headers ride on the model, not the provider: pi-ai
+  merges `model.headers` into the request during auth resolution and ignores
+  the provider's own. */
+  const headers = resolveProviderHeaders(resolved.provider.headers, flags.sessionId);
+  if (headers !== undefined) {
+    resolved.model = { ...resolved.model, headers: { ...resolved.model.headers, ...headers } };
+  }
   return resolved;
 }
 

@@ -43,7 +43,10 @@ week scope. The harness replaces `opencode run` in that path
   `compaction_finished` (`outcome: completed|failed`) bracket that call.
 - Provider/model/effort selection driven by a generated `models.json`,
   projected from the operator's canonical registry
-  (`~/.config/providers/registry.json`, LPFchan/setup).
+  (`~/.config/providers/registry.json`, LPFchan/setup). Credentials resolve by
+  the registry's declared `auth_key` (providers may share one stored key), and
+  registry-declared request headers reach the model with `{session_id}`
+  substituted.
 - Generated per-model context, output, pricing, modality, and reasoning fields
   override matching entries in Pi's bundled catalogue.
 - Subscription OAuth reuse: the `anthropic` and `codex` providers run on
@@ -85,7 +88,10 @@ week scope. The harness replaces `opencode run` in that path
   retry layer are library dependencies (`@earendil-works/pi-agent-core`,
   `@earendil-works/pi-ai`), not hand-built.
 - **Setup's registry is the source of truth** for provider enrollment;
-  `models.json` is generated from it, never hand-edited as canonical.
+  `models.json` is generated from it, never hand-edited as canonical. An
+  enrolled provider is registered from that enrollment — endpoint, credential
+  name, transport, required headers — even when Pi bundles a provider with the
+  same id (DEC-20260921-002). The CLI OAuth aliases are the one exception.
 - **Build on maintained libraries; fork nothing.** Adopt only code with an
   active upstream and a real contributor base.
 

@@ -19,7 +19,7 @@ Do not use it as a transcript or a scratchpad.
   DEC-20260814-001 (persisted-session resumption), DEC-20260818-001
   (sessions start before inference), DEC-20260819-001 (compaction lifecycle),
   DEC-20260827-001 (multimodal input manifest), DEC-20260921-001 (opt-in
-  built-in bash tool)
+  built-in bash tool), DEC-20260921-002 (registry enrollment wins)
 - Origin research: heatmap `records/research/RSH-20260808-001-miniharness-opencode-replacement.md`
 
 ## Current State Summary
@@ -58,6 +58,16 @@ signatures, media types, and lowercase SHA-256 digests before opening a session
 or resolving a model. Pi receives the complete ordered `AgentMessage`, so the
 provider sees actual image bytes rather than descriptions. Legacy positional
 and stdin prompts retain their existing behavior.
+
+Registry enrollment now beats Pi's bundled provider definitions: an enrolled
+provider takes its endpoint, credential name (`auth_key`), transport, and
+required headers from the projection, and Pi's builtin of the same id no
+longer shadows it. This unblocked `opencode-go` (whose builtin reads a
+different env var and ships a stale 18-model catalogue) and repaired
+`opencode-zen` and `kimicode`, which had been broken by credential-name and
+transport mismatches. Verified live on grimoire against `deepseek-v4.1-flash`,
+`mimo-v2.5`, `glm-5.3-flash`, and `qwen3.8-flash`, including a bash tool round
+trip.
 
 `--allow-bash` exposes Pi's built-in bash tool, off by default, appended
 after the MCP merge and failing closed on a name collision with an exposed MCP

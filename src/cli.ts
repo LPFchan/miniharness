@@ -278,13 +278,14 @@ async function readStdinIfPiped(): Promise<string> {
  * (src/config.ts). ConfigError maps to DEC exit 2 with the module's
  * one-line message; resolution is pure, sync, and network-free.
  */
-function resolveModel(flags: Flags): ResolvedModel {
+function resolveModel(flags: Flags, sessionId?: string): ResolvedModel {
   const configDir = resolveConfigDir(flags.configDir);
   try {
     const resolved = resolveConfig(configDir, {
       provider: flags.provider,
       model: flags.model,
       effort: flags.effort,
+      sessionId,
     });
     return {
       model: resolved.model,
@@ -1101,7 +1102,7 @@ async function main(): Promise<void> {
     });
   }
   const effectiveSystemPrompt = fillSessionIdTemplate(systemPrompt, opened?.id);
-  const resolved = resolveModel(flags);
+  const resolved = resolveModel(flags, opened?.id);
   // Generation API validation follows model resolution but still precedes
   // credentials, MCP discovery, and all provider construction/contact.
   validateGenerationApi(flags, resolved);
