@@ -59,6 +59,10 @@ or resolving a model. Pi receives the complete ordered `AgentMessage`, so the
 provider sees actual image bytes rather than descriptions. Legacy positional
 and stdin prompts retain their existing behavior.
 
+Release 0.1.12 publishes the opt-in bash tool, the provider-resolution fix,
+and the compaction session-write fix, together with the model-limit work that
+0.1.11 carried but never shipped.
+
 Registry enrollment now beats Pi's bundled provider definitions: an enrolled
 provider takes its endpoint, credential name (`auth_key`), transport, and
 required headers from the projection, and Pi's builtin of the same id no
