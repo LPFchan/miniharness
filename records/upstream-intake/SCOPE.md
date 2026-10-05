@@ -17,7 +17,8 @@ candidate decision, never a silent upgrade:
 
 - **Agent API** — `Agent` construction, `subscribe()` / `AgentEvent` shapes,
   `prompt()`, `waitForIdle()`, `abort()`, and `state.messages`, as consumed by
-  `src/cli.ts`.
+  `src/cli.ts`; `AgentMessage` shapes, including multimodal input prepared by
+  `src/input-manifest.ts`.
 - **Session JSONL layout** — `JsonlSessionRepo`'s persisted format under the
   harness-configured session root: `--session-dir`, then
   `MINIHARNESS_SESSION_DIR`, then `~/.local/share/miniharness/sessions/`.
@@ -27,17 +28,25 @@ candidate decision, never a silent upgrade:
   metadata, message/entry append, log reads, and filesystem cleanup in
   `src/cli.ts`.
 - **Compaction and tool contracts** — `estimateContextTokens`,
-  `shouldCompact`, `prepareCompaction`, `compact`, compaction entries, and
+  `shouldCompact`, `prepareCompaction`, `compact`, `Entry` / `CompactionEntry`, and
   `DEFAULT_COMPACTION_SETTINGS`; `createBashTool` and the `AgentTool` /
-  `AgentToolResult` shapes consumed by `src/cli.ts` and `src/mcp.ts`.
+  `AgentToolResult` / `BashToolInput` shapes consumed by `src/cli.ts` and
+  `src/mcp.ts`.
 - **Model catalogue and reasoning schema** — Pi's `Model` fields and
-  `getSupportedThinkingLevels`; merging the built-in catalogue with generated
-  `models.json`, including `thinkingLevelMap`, in `src/config.ts`.
+  `ModelThinkingLevel` / `ThinkingLevelMap`, plus `getSupportedThinkingLevels`;
+  merging the built-in catalogue with generated `models.json`, including
+  `thinkingLevelMap`, in `src/config.ts`, and native reasoning-payload
+  adaptation in `src/grimoire.ts`.
+- **Output and usage accounting** — `contentText()`, the `Usage` token/cost
+  fields, and `calculateCost()` used by `src/cli.ts` to construct the public
+  success envelope's output, token counts, and microdollar cost.
 - **Provider transport and credentials** — Pi's model/provider registration,
-  `Models.streamSimple`, credential lookup and CLI OAuth reuse in
+  `Models` / `MutableModels` / `Api`, streaming and `FetchFunction` contracts,
+  and `CredentialStore` credential/operation shapes for CLI OAuth reuse in
   `src/config.ts`, `src/cli-oauth.ts`, and `src/cli.ts`; review upstream retry
   changes against these call sites and the completed-response adapter in
-  `src/cloudflare.ts`.
+  `src/cloudflare.ts`, plus `createAssistantMessageEventStream` in the
+  provider test stubs.
 - **Config-path contract** — generated `models.json` from `--config-dir`,
   then `PI_CODING_AGENT_DIR`, then `~/.pi/agent/`, as resolved by
   `src/config.ts`.
