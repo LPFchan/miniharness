@@ -16,8 +16,9 @@ harness builds on, consumed as npm packages — not a fork's source repo.
 These are the Pi contracts miniharness depends on; any change here is a
 candidate decision, never a silent upgrade:
 
-- **Agent loop API** — `agentLoop()` and its `AgentLoopConfig` / `AgentEvent`
-  shapes.
+- **Agent API** — `Agent` construction, `subscribe()` / `AgentEvent` shapes,
+  `prompt()`, `waitForIdle()`, `abort()`, and `state.messages`, as consumed by
+  `src/cli.ts`.
 - **Session/session-manager JSONL layout** — the append-only session file
   format and `~/.pi/agent/sessions/` path convention. Heatmap's adoption/
   recovery join parses this; a schema change breaks the safety net.
