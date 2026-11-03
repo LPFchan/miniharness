@@ -30,12 +30,6 @@ jobs:
 
       - run: npm ci
 
-      # The suite runs against dist/, so build before testing rather than
-      # leaving it to prepublishOnly.
-      - run: npm run build
-
-      - run: npm test
-
       - name: tag matches package.json version
         run: |
           tag="${GITHUB_REF_NAME#v}"
@@ -45,4 +39,6 @@ jobs:
             exit 1
           fi
 
+      # prepublishOnly builds dist/ and runs the suite against it, so this is
+      # the single build+test for the release (manual publishes get the same).
       - run: npm publish
