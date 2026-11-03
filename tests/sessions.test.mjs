@@ -23,7 +23,7 @@ const REPO_ROOT = new URL("..", import.meta.url).pathname;
 
 const liveRaw = process.env.MINIHARNESS_LIVE;
 const LIVE = liveRaw !== undefined && !["", "0", "false", "no"].includes(liveRaw.toLowerCase());
-const LIVE_SKIP = "requires a live provider - set MINIHARNESS_LIVE=1 to run (kept off to avoid network calls)";
+const LIVE_SKIP = LIVE ? false : "requires a live provider - set MINIHARNESS_LIVE=1 to run (kept off to avoid network calls)";
 
 /** The command that launches the harness, run with cwd = repo root. */
 function harnessCommand() {
