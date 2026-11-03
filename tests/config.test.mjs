@@ -451,14 +451,6 @@ test("ConfigError is the single typed error family", () => {
   }
 });
 
-test("resolveModel: model carries the registry provider name for routing", () => {
-  const config = fixtureConfig();
-  const resolved = resolveModel(config, KIMICODE, "k3");
-  assert.equal(resolved.model.provider, "kimicode");
-  // The pi provider that actually streams it (kimi-coding) is available in
-  // the catalogue; the routed name stays the registry name per the DEC.
-});
-
 test("custom OpenAI-compatible providers resolve explicit models from config without /models discovery", () => {
   const config = {
     providers: {

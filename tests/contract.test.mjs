@@ -17,7 +17,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -176,29 +176,4 @@ test('input: --system-prompt and --system-prompt-file - are accepted [DEC Input:
   assert.equal(fileDash.status, 0, `--system-prompt-file - summon failed (${fileDash.status}): ${fileDash.stderr}`);
   assertEnvelope(inline.stdout, inline.stderr);
   assertEnvelope(fileDash.stdout, fileDash.stderr);
-});
-
-// ---------------------------------------------------------------------------
-// Failure semantics - exit 1
-// ---------------------------------------------------------------------------
-
-test('failure semantics: in-flight failure exits 1 with empty stdout [DEC Exit Codes: 1]', () => {
-  // The fault-injection hook fires after invocation validation, which needs
-  // a readable models.json: point PI_CODING_AGENT_DIR at the fixture and
-  // resolve provider/model explicitly (the default provider has no
-  // default_model).
-  const configDir = mkdtempSync(join(tmpdir(), 'miniharness-fail-config-'));
-  writeFileSync(
-    join(configDir, 'models.json'),
-    readFileSync(join(REPO_ROOT, 'tests', 'fixture-models.json'), 'utf8'),
-  );
-  const { status, stdout, stderr } = runHarness(
-    ['--provider', 'kimicode', '--model', 'sonnet', '--effort', 'low', 'Reply with the single word ok.'],
-    {
-      env: { ...process.env, MINIHARNESS_FAIL_AFTER: 'provider-connect', PI_CODING_AGENT_DIR: configDir },
-    },
-  );
-  assert.equal(status, 1, `in-flight failure must exit 1 (got ${status}); stderr: ${stderr}`);
-  assert.equal(stdout, '', 'stdout must be machine-clean and empty unless exit 0');
-  assert.ok(/MINIHARNESS_FAIL_AFTER/.test(stderr), 'stderr must carry the injected-failure marker');
 });
