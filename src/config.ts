@@ -68,6 +68,7 @@ import { stream as openaiCompletionsStream, streamSimple as openaiCompletionsStr
 import { builtinProviders } from "@earendil-works/pi-ai/providers/all";
 import { claudeCredentialsFile, codexAuthFile, CliOAuthCredentialStore } from "./cli-oauth.js";
 import { existsSync } from "node:fs";
+import { transformCloudflarePayload } from "./cloudflare.js";
 import { transformGrimoirePayload } from "./grimoire.js";
 
 /** DEC tier names, in the registry's conventional order. */
@@ -158,6 +159,27 @@ export function composeGrimoirePayloadTransform<T extends {
         modelId: model.id,
         effort,
         thinkingLevelMap: model.thinkingLevelMap,
+        providerDefault: providerDefaultModels.has(model),
+      });
+    },
+  };
+}
+
+export function composeCloudflarePayloadTransform<T extends {
+  onPayload?: (payload: unknown, model: Model<Api>) => unknown | undefined | Promise<unknown | undefined>;
+  reasoning?: ModelThinkingLevel;
+  reasoningEffort?: ModelThinkingLevel;
+}>(
+  options: T | undefined,
+): T & { onPayload: NonNullable<T["onPayload"]> } {
+  const prior = options?.onPayload;
+  const effort = options?.reasoning ?? options?.reasoningEffort ?? "off";
+  return {
+    ...(options ?? {} as T),
+    onPayload: async (payload, model) => {
+      const previous = await prior?.(payload, model);
+      return transformCloudflarePayload(previous === undefined ? payload : previous, {
+        effort,
         providerDefault: providerDefaultModels.has(model),
       });
     },
@@ -269,7 +291,12 @@ export function registerCustomProviders(
   authFile: string = process.env[AUTH_FILE_ENV] ?? DEFAULT_AUTH_FILE,
 ): void {
   for (const [name, entry] of Object.entries(config.providers)) {
-    const isGrimoire = name.toLowerCase() === "grimoire";
+    const lowerName = name.toLowerCase();
+    const transformOptions = lowerName === "grimoire"
+      ? composeGrimoirePayloadTransform
+      : lowerName === "cloudflare"
+        ? composeCloudflarePayloadTransform
+        : undefined;
     const credentialName = entry.auth_key ?? name;
     const provider = createProvider({
       id: name,
@@ -287,11 +314,11 @@ export function registerCustomProviders(
       models: [],
       api: {
         "openai-completions": {
-          stream: isGrimoire
-            ? (model, context, options) => openaiCompletionsStream(model as OpenAICompletionsModel, context, composeGrimoirePayloadTransform(options))
+          stream: transformOptions
+            ? (model, context, options) => openaiCompletionsStream(model as OpenAICompletionsModel, context, transformOptions(options))
             : openaiCompletionsStream,
-          streamSimple: isGrimoire
-            ? (model, context, options) => openaiCompletionsStreamSimple(model as OpenAICompletionsModel, context, composeGrimoirePayloadTransform(options))
+          streamSimple: transformOptions
+            ? (model, context, options) => openaiCompletionsStreamSimple(model as OpenAICompletionsModel, context, transformOptions(options))
             : openaiCompletionsStreamSimple,
         },
       },
@@ -712,7 +739,9 @@ export function resolveConfig(
   the provider's own. */
   const headers = resolveProviderHeaders(resolved.provider.headers, flags.sessionId);
   if (headers !== undefined) {
+    const isProviderDefault = providerDefaultModels.has(resolved.model);
     resolved.model = { ...resolved.model, headers: { ...resolved.model.headers, ...headers } };
+    if (isProviderDefault) providerDefaultModels.add(resolved.model);
   }
   return resolved;
 }

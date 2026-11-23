@@ -1,4 +1,4 @@
-import type { FetchFunction } from "@earendil-works/pi-ai";
+import type { FetchFunction, ModelThinkingLevel } from "@earendil-works/pi-ai";
 
 interface CompletionChoice {
   index?: number;
@@ -98,4 +98,54 @@ export function cloudflareCompletedResponseFetch(baseFetch: FetchFunction = glob
       headers,
     });
   };
+}
+
+export type CloudflarePayloadOptions = Readonly<{
+  effort: ModelThinkingLevel;
+  providerDefault?: boolean;
+}>;
+
+function object(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+/**
+ * Apply Cloudflare Workers AI chat-template thinking controls after Pi builds
+ * its payload. Reasoning models on Workers AI (e.g. Gemma 4) default to
+ * thinking on unless `chat_template_kwargs.enable_thinking` is explicitly
+ * `false`; `--effort default` omits the control to preserve provider default.
+ */
+export function transformCloudflarePayload(
+  payload: unknown,
+  options: CloudflarePayloadOptions,
+): unknown {
+  const source = object(payload);
+  if (source === undefined) return payload;
+
+  const transformed: Record<string, unknown> = { ...source };
+  const configured = object(source.chat_template_kwargs) ?? {};
+  const chatTemplateKwargs: Record<string, unknown> = { ...configured };
+
+  if (options.providerDefault === true) {
+    delete chatTemplateKwargs.enable_thinking;
+    if (Object.keys(chatTemplateKwargs).length === 0) {
+      delete transformed.chat_template_kwargs;
+    } else {
+      transformed.chat_template_kwargs = chatTemplateKwargs;
+    }
+    return transformed;
+  }
+
+  if (options.effort === "off") {
+    delete transformed.reasoning_effort;
+    chatTemplateKwargs.enable_thinking = false;
+    transformed.chat_template_kwargs = chatTemplateKwargs;
+    return transformed;
+  }
+
+  chatTemplateKwargs.enable_thinking = true;
+  transformed.chat_template_kwargs = chatTemplateKwargs;
+  return transformed;
 }

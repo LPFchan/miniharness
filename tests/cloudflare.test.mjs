@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { cloudflareCompletedResponseFetch } from "../dist/cloudflare.js";
+import { cloudflareCompletedResponseFetch, transformCloudflarePayload } from "../dist/cloudflare.js";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { composeCloudflarePayloadTransform, resolveConfig, resolveEffort } from "../dist/config.js";
 
 function parseSse(responseText) {
   const lines = responseText.trim().split("\n\n");
@@ -95,4 +99,116 @@ test("Cloudflare adapter passes through unrelated and failed requests", async ()
   });
   assert.equal(failure, failed);
   assert.equal(JSON.parse(calls[1].init.body).stream, false);
+});
+
+test("Cloudflare off disables chat-template thinking and drops reasoning_effort", () => {
+  const payload = transformCloudflarePayload({
+    model: "@cf/google/gemma-4-26b-a4b-it",
+    reasoning_effort: "low",
+    chat_template_kwargs: { custom_flag: true },
+  }, {
+    effort: "off",
+  });
+  assert.deepEqual(payload, {
+    model: "@cf/google/gemma-4-26b-a4b-it",
+    chat_template_kwargs: { custom_flag: true, enable_thinking: false },
+  });
+});
+
+test("Cloudflare provider default omits enable_thinking while keeping other kwargs", () => {
+  const stripped = transformCloudflarePayload({
+    model: "@cf/google/gemma-4-26b-a4b-it",
+    chat_template_kwargs: { enable_thinking: false },
+  }, {
+    effort: "off",
+    providerDefault: true,
+  });
+  assert.deepEqual(stripped, {
+    model: "@cf/google/gemma-4-26b-a4b-it",
+  });
+
+  const preserved = transformCloudflarePayload({
+    model: "@cf/google/gemma-4-26b-a4b-it",
+    chat_template_kwargs: { custom_flag: true, enable_thinking: false },
+  }, {
+    effort: "off",
+    providerDefault: true,
+  });
+  assert.deepEqual(preserved, {
+    model: "@cf/google/gemma-4-26b-a4b-it",
+    chat_template_kwargs: { custom_flag: true },
+  });
+});
+
+test("Cloudflare non-off effort enables chat-template thinking", () => {
+  const payload = transformCloudflarePayload({
+    model: "@cf/google/gemma-4-26b-a4b-it",
+    reasoning_effort: "low",
+  }, {
+    effort: "low",
+  });
+  assert.deepEqual(payload, {
+    model: "@cf/google/gemma-4-26b-a4b-it",
+    reasoning_effort: "low",
+    chat_template_kwargs: { enable_thinking: true },
+  });
+});
+
+test("Cloudflare request composition honors effort, default, compaction, and prior transforms", async () => {
+  const offModel = { id: "@cf/google/gemma-4-26b-a4b-it" };
+  const mainOff = composeCloudflarePayloadTransform({
+    reasoning: "off",
+    onPayload: (payload) => ({ ...payload, prior: true }),
+  });
+  assert.deepEqual(await mainOff.onPayload({ model: offModel.id }, offModel), {
+    model: offModel.id,
+    prior: true,
+    chat_template_kwargs: { enable_thinking: false },
+  });
+
+  const compaction = composeCloudflarePayloadTransform({});
+  assert.deepEqual(await compaction.onPayload({ model: offModel.id }, offModel), {
+    model: offModel.id,
+    chat_template_kwargs: { enable_thinking: false },
+  });
+
+  const defaultModel = { id: "@cf/google/gemma-4-26b-a4b-it" };
+  assert.equal(resolveEffort({ model: defaultModel }, "default"), "off");
+  const mainDefault = composeCloudflarePayloadTransform({ reasoning: "off" });
+  assert.deepEqual(await mainDefault.onPayload({ model: defaultModel.id }, defaultModel), {
+    model: defaultModel.id,
+  });
+});
+
+test("Cloudflare provider default survives registry headers in resolveConfig", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "miniharness-cf-headers-"));
+  try {
+    writeFileSync(
+      join(dir, "models.json"),
+      JSON.stringify({
+        providers: {
+          cloudflare: {
+            base_url: "https://api.cloudflare.com/client/v4/accounts/example/ai/v1",
+            provider_type: "OpenAICompatible",
+            headers: { "x-custom-trace": "{session_id}" },
+            models: [{ id: "@cf/google/gemma-4-26b-a4b-it" }],
+          },
+        },
+      }),
+    );
+    const resolved = resolveConfig(dir, {
+      provider: "cloudflare",
+      model: "@cf/google/gemma-4-26b-a4b-it",
+      effort: "default",
+      sessionId: "sess-1",
+    });
+    assert.equal(resolved.model.headers?.["x-custom-trace"], "sess-1");
+    const opts = composeCloudflarePayloadTransform({ reasoning: resolved.thinkingLevel });
+    assert.deepEqual(
+      await opts.onPayload({ model: resolved.model.id, chat_template_kwargs: { enable_thinking: false } }, resolved.model),
+      { model: resolved.model.id },
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
