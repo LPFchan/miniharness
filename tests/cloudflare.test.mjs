@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { cloudflareCompletedResponseFetch, transformCloudflarePayload } from "../dist/cloudflare.js";
-import { composeCloudflarePayloadTransform, resolveEffort } from "../dist/config.js";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { composeCloudflarePayloadTransform, resolveConfig, resolveEffort } from "../dist/config.js";
 
 function parseSse(responseText) {
   const lines = responseText.trim().split("\n\n");
@@ -175,4 +178,37 @@ test("Cloudflare request composition honors effort, default, compaction, and pri
   assert.deepEqual(await mainDefault.onPayload({ model: defaultModel.id }, defaultModel), {
     model: defaultModel.id,
   });
+});
+
+test("Cloudflare provider default survives registry headers in resolveConfig", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "miniharness-cf-headers-"));
+  try {
+    writeFileSync(
+      join(dir, "models.json"),
+      JSON.stringify({
+        providers: {
+          cloudflare: {
+            base_url: "https://api.cloudflare.com/client/v4/accounts/example/ai/v1",
+            provider_type: "OpenAICompatible",
+            headers: { "x-custom-trace": "{session_id}" },
+            models: [{ id: "@cf/google/gemma-4-26b-a4b-it" }],
+          },
+        },
+      }),
+    );
+    const resolved = resolveConfig(dir, {
+      provider: "cloudflare",
+      model: "@cf/google/gemma-4-26b-a4b-it",
+      effort: "default",
+      sessionId: "sess-1",
+    });
+    assert.equal(resolved.model.headers?.["x-custom-trace"], "sess-1");
+    const opts = composeCloudflarePayloadTransform({ reasoning: resolved.thinkingLevel });
+    assert.deepEqual(
+      await opts.onPayload({ model: resolved.model.id, chat_template_kwargs: { enable_thinking: false } }, resolved.model),
+      { model: resolved.model.id },
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

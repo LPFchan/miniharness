@@ -739,7 +739,9 @@ export function resolveConfig(
   the provider's own. */
   const headers = resolveProviderHeaders(resolved.provider.headers, flags.sessionId);
   if (headers !== undefined) {
+    const isProviderDefault = providerDefaultModels.has(resolved.model);
     resolved.model = { ...resolved.model, headers: { ...resolved.model.headers, ...headers } };
+    if (isProviderDefault) providerDefaultModels.add(resolved.model);
   }
   return resolved;
 }
