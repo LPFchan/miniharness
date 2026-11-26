@@ -6,7 +6,7 @@ Do not use it as a transcript or a scratchpad.
 
 ## Snapshot
 
-- Last updated: 2026-09-21
+- Last updated: 2026-11-26
 - Overall posture: `active`
 - Current focus: opt-in local tool exposure. `--allow-bash` lands Pi's
   built-in bash tool behind a flag for callers that need the model to inspect
@@ -58,6 +58,11 @@ signatures, media types, and lowercase SHA-256 digests before opening a session
 or resolving a model. Pi receives the complete ordered `AgentMessage`, so the
 provider sees actual image bytes rather than descriptions. Legacy positional
 and stdin prompts retain their existing behavior.
+
+Release 0.1.13 publishes Cloudflare Workers AI chat-template thinking controls
+(`chat_template_kwargs.enable_thinking`), so omitted/`off` effort disables
+thinking on Cloudflare reasoning models such as `@cf/google/gemma-4-26b-a4b-it`
+while `--effort default` preserves the provider default.
 
 Release 0.1.12 publishes the opt-in bash tool, the provider-resolution fix,
 and the compaction session-write fix, together with the model-limit work that
